@@ -1,6 +1,6 @@
 ---
 name: daily-work-summary
-description: Use when the user asks for a Chinese daily work summary, work log, day-end review, or objective workplace recap with strict wording, no evaluative claims, and a required three-item opening.
+description: Use when the user asks for a Chinese daily work summary, work log, day-end review, objective workplace recap, or a summary generated from daily Git commits. Supports extracting Git commit records with the bundled daily_git_commits.py script, then rewriting them into strict Chinese prose with no evaluative claims and a required three-item opening.
 ---
 
 # Daily Work Summary
@@ -11,9 +11,26 @@ Write an objective Chinese daily work summary that records what was handled, how
 
 When requirements conflict, use the user's confirmed口径: write limited context only. Explain the work's background, process position, scope, and relationship to other work, but do not evaluate outcomes.
 
+## Git Commit Source
+
+When the user asks to generate a daily summary from Git commits, use the bundled script `scripts/daily_git_commits.py` as the source extractor before writing the final summary.
+
+Typical commands:
+
+```bash
+python scripts/daily_git_commits.py
+python scripts/daily_git_commits.py --date 2026-04-13
+python scripts/daily_git_commits.py --since 2026-04-01 --until 2026-04-13
+python scripts/daily_git_commits.py --author zhangpulong --roots D:\WorkSpace D:\CETWorkSpace
+```
+
+Use script output as raw work material only. Do not paste the generated Git report as the final answer. Convert commit subjects, commit bodies, changed files, repositories, and diff stats into the required objective Chinese daily summary.
+
+If the script finds no commits, say that no matching Git commit records were found for the selected date range, then ask the user to provide additional work content. Override `--author`, `--date`, `--since`, `--until`, or `--roots` from the user request instead of editing the script.
+
 ## If Work Content Is Missing
 
-If the user has not provided today's work content, output exactly this text and stop:
+If the user has not provided today's work content and has not asked to generate from Git commits, output exactly this text and stop:
 
 ```text
 您好，作为您的工作总结撰写顾问，我会按照您的要求，为您撰写一份详细且客观的工作总结。请您先简单介绍一下今天的主要工作内容，我会从全局角度进行分析和总结，突出工作中的收获、挑战及改进空间。现在，请您开始讲述今天的工作情况吧。
