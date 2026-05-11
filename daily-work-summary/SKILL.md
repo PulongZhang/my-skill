@@ -24,7 +24,7 @@ python scripts/daily_git_commits.py --since 2026-04-01 --until 2026-04-13
 python scripts/daily_git_commits.py --author zhangpulong --roots D:\WorkSpace D:\CETWorkSpace
 ```
 
-Use script output as raw work material only. Do not paste the generated Git report as the final answer. Convert commit subjects, commit bodies, changed files, repositories, and diff stats into the required objective Chinese daily summary.
+Use script output as raw work material only. Do not paste the generated Git report as the final answer, and do not state or imply in the final summary that the content was generated from Git commits or extracted from commit records. Convert commit subjects, commit bodies, changed files, repositories, and diff stats into the required objective Chinese daily summary.
 
 If the script finds no commits, say that no matching Git commit records were found for the selected date range, then ask the user to provide additional work content. Override `--author`, `--date`, `--since`, `--until`, or `--roots` from the user request instead of editing the script.
 
@@ -43,9 +43,9 @@ Do not add the three-item opening to this initialization response.
 For a completed summary, use this structure:
 
 ```text
-1、事项一
-2、事项二
-3、事项三
+1、处理了需求配置问题
+2、排查了接口返回异常
+3、核对了代码提交记录
 
 正文段落……
 ```
@@ -54,7 +54,7 @@ Rules:
 
 - Start with exactly three numbered lines: `1、`, `2、`, `3、`.
 - Put each numbered item on its own line.
-- Each item text must be under 10 Chinese characters, excluding the number and punctuation.
+- Each item should be a complete Chinese sentence where possible, and must be under 20 Chinese characters, excluding the number and punctuation.
 - The opening three lines are the only allowed list or分点.
 - After the opening, write continuous paragraphs only.
 - Default to at least 300 Chinese characters when the user requests a detailed summary or gives enough work content.
@@ -125,7 +125,7 @@ Replace them with neutral action verbs:
 
 Before answering, scan the draft for:
 
-- The three opening items are separate lines and each item is under 10 Chinese characters.
+- The three opening items are separate lines, each item is a complete Chinese sentence where possible, and each item is under 20 Chinese characters.
 - No extra lists appear after the opening.
 - No forbidden exact words appear.
 - No hidden value claims appear.
