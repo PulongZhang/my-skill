@@ -43,9 +43,9 @@ Do not add the three-item opening to this initialization response.
 For a completed summary, use this structure:
 
 ```text
-1、处理了需求配置问题
-2、排查了接口返回异常
-3、核对了代码提交记录
+1、处理需求配置问题
+2、排查接口返回异常
+3、核对代码提交记录
 
 正文段落……
 ```
@@ -59,6 +59,7 @@ Rules:
 - After the opening, write continuous paragraphs only.
 - Default to at least 300 Chinese characters when the user requests a detailed summary or gives enough work content.
 - Do not use personal pronouns such as“我”“我们”“本人”.
+- Do not use the Chinese character “了”.
 - Do not use order-linking words such as“首先”“其次”“然后”“最后”.
 - Do not use metaphors, exaggeration, slogans, or English except necessary technical terms.
 - Do not overemphasize implementation details; keep technical details only when needed to identify the work.
@@ -101,7 +102,7 @@ Bad:
 Never use these exact words or phrases in the final summary:
 
 ```text
-确保、提高、改善、增强、促进、优化、帮助、便于、有利于、成功、有效、高效、便捷、可靠、稳定、优质、使得、实现了、达到了
+确保、提高、改善、增强、促进、优化、帮助、便于、有利于、成功、有效、高效、便捷、可靠、稳定、优质、使得、实现、达到、了
 ```
 
 Also avoid hidden evaluation or result-benefit wording, including:
@@ -130,6 +131,7 @@ Before answering, scan the draft for:
 - No forbidden exact words appear.
 - No hidden value claims appear.
 - No personal pronouns appear.
+- No Chinese character “了” appears.
 - No“首先/其次/然后/最后”appear.
 - Reflection describes facts, constraints, challenges, and follow-up work instead of benefits or impact.
 
