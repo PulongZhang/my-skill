@@ -1,6 +1,6 @@
 ---
 name: daily-work-summary
-description: Use when the user asks for a Chinese daily work summary, work log, day-end review, objective workplace recap, or a summary generated from daily Git commits. Supports extracting Git commit records with the bundled daily_git_commits.py script, then rewriting them into strict Chinese prose with no evaluative claims and a required three-item opening.
+description: Use when the user asks for a Chinese daily work summary, work log, day-end review, objective workplace recap, diligent time note, or a summary generated from daily Git commits. Supports extracting Git commit records with daily_git_commits.py and appending diligent time from calculate_diligent_time.py while keeping strict objective Chinese prose.
 ---
 
 # Daily Work Summary
@@ -48,6 +48,9 @@ For a completed summary, use this structure:
 3、核对代码提交记录
 
 正文段落……
+
+[勤奋时间][17:45][19:45]
+勤奋工作内容: 继续核对需求配置和提交记录
 ```
 
 Rules:
@@ -57,12 +60,26 @@ Rules:
 - Each item should be a complete Chinese sentence where possible, and must be under 20 Chinese characters, excluding the number and punctuation.
 - The opening three lines are the only allowed list or分点.
 - After the opening, write continuous paragraphs only.
+- When adding diligent time, append exactly two independent lines after the正文: `[勤奋时间][17:45][xx:xx]` and `勤奋工作内容: ...`.
+- Diligent time lines are the only allowed extra non-paragraph lines after the opening.
 - Default to at least 300 Chinese characters when the user requests a detailed summary or gives enough work content.
 - Do not use personal pronouns such as“我”“我们”“本人”.
 - Do not use the Chinese character “了”.
 - Do not use order-linking words such as“首先”“其次”“然后”“最后”.
 - Do not use metaphors, exaggeration, slogans, or English except necessary technical terms.
 - Do not overemphasize implementation details; keep technical details only when needed to identify the work.
+
+## Diligent Time
+
+When the user asks to include diligent time, or when work content indicates overtime content should be recorded, run `python scripts/calculate_diligent_time.py` to get the end-time line.
+
+Rules:
+
+- Start time is always `17:45`.
+- Use the script output line as the first diligent time line, for example `[勤奋时间][17:45][19:45]`.
+- Add the second line as `勤奋工作内容: ...`, using a short objective description of the overtime work.
+- If the script outputs no valid diligent time, omit both diligent time lines.
+- Keep the same forbidden wording, no-personal-pronoun, and no-evaluation rules in `勤奋工作内容`.
 
 ## Content Coverage
 
@@ -127,7 +144,8 @@ Replace them with neutral action verbs:
 Before answering, scan the draft for:
 
 - The three opening items are separate lines, each item is a complete Chinese sentence where possible, and each item is under 20 Chinese characters.
-- No extra lists appear after the opening.
+- No extra lists appear after the opening, except the optional two diligent time lines after正文.
+- If diligent time is included, it has exactly two lines: `[勤奋时间][17:45][xx:xx]` and `勤奋工作内容: ...`.
 - No forbidden exact words appear.
 - No hidden value claims appear.
 - No personal pronouns appear.
