@@ -271,7 +271,61 @@ GET /api/v2/projects/{projectId}/tasks?pageSize=10
 
 分页查询项目下的任务列表。
 
-## 五、删除任务
+## 五、GraphQL 查询任务
+
+**接口：** `POST /api/v2/graphql`
+
+**用途：** 通过 GraphQL 一次查询获取任务列表及关联信息（项目、执行者、子任务数等），比 REST API 更灵活。
+
+**请求体：**
+
+```json
+{
+  "query": "\n    query TasksByOrg($organizationId: ID!, $shortIds: [String], $tql: String, $userView: String, $after: String) {\n  organization(organizationId: $organizationId) {\n    tasks(first: 40, shortIds: $shortIds, tql: $tql, userView: $userView, after: $after) {\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      nodes {\n        id\n        content\n        project {\n          id\n          name\n        }\n        isDone\n        executorUser {\n          userId\n          name\n          avatarUrl\n        }\n        projectSfc {\n          icon\n          originalId\n        }\n        parentTask {\n          content\n        }\n        tasklistId\n        stageId\n        sfcId\n        tfsId\n        subtaskCount {\n          total\n          done\n        }\n        startDate\n        dueDate\n        isDeleted\n        isArchived\n      }\n    }\n  }\n}\n    ",
+  "variables": {
+    "organizationId": "66acf1018881ceb6d5324658",
+    "tql": "isArchived = false",
+    "after": ""
+  }
+}
+```
+
+**变量说明：**
+
+| 变量 | 说明 |
+|------|------|
+| `organizationId` | 组织 ID（必填） |
+| `tql` | 过滤条件，如 `isArchived = false`、`isDone = false` |
+| `first` | 每页数量，默认 40 |
+| `after` | 分页游标，翻页时传上一页返回的 `endCursor` |
+| `shortIds` | 按任务短 ID 精确查询（可选） |
+| `userView` | 用户视图过滤（可选） |
+
+**返回字段：**
+
+| 字段 | 说明 |
+|------|------|
+| `pageInfo.hasNextPage` | 是否有下一页 |
+| `pageInfo.endCursor` | 下一页游标 |
+| `nodes[].id` | 任务 ID |
+| `nodes[].content` | 任务标题 |
+| `nodes[].isDone` | 是否完成 |
+| `nodes[].isArchived` | 是否归档 |
+| `nodes[].executorUser` | 执行者（userId、name、avatarUrl） |
+| `nodes[].project` | 所属项目（id、name） |
+| `nodes[].projectSfc` | 场景配置（icon: requirement/bug/call/order/resource） |
+| `nodes[].parentTask` | 父任务（content） |
+| `nodes[].subtaskCount` | 子任务数（total、done） |
+| `nodes[].startDate` | 开始日期 |
+| `nodes[].dueDate` | 截止日期 |
+
+**使用场景：**
+- 查找当前用户的所有未完成任务
+- 按项目筛选任务
+- 获取任务的父任务关系（判断归属的需求/缺陷大类）
+- 分页遍历组织下全部任务
+
+## 六、删除任务
 
 ```
 DELETE /api/tasks/{taskId}
