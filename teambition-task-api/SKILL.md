@@ -325,11 +325,68 @@ GET /api/v2/projects/{projectId}/tasks?pageSize=10
 - 获取任务的父任务关系（判断归属的需求/缺陷大类）
 - 分页遍历组织下全部任务
 
+**TQL 字段名注意：** 过滤执行者用 `executorId = "用户ID"`（**不是** `executor`）；`project` 也是非法字段名。可用组合如 `isArchived = false AND executorId = "66c4be9751257bcd6ccc6033" AND isDone = true`。按执行者过滤用 GraphQL 比项目任务 REST 接口的 `_executorId` query 参数更可靠（后者不生效）。
+
 ## 六、删除任务
 
 ```
 DELETE /api/tasks/{taskId}
 ```
+
+## 七、更新任务状态（工作流状态变更 / 标记已完成）
+
+工作流（taskflow）项目里**不能**用通用接口改状态，必须用专门的状态变更接口。
+
+**接口：** `PUT /api/tasks/{taskId}/taskflowstatus`
+
+**请求头：** `{"Content-Type": "application/json"}`
+
+**请求体：**
+
+```json
+{
+  "_taskflowstatusId": "目标状态ID",
+  "_scenariofieldconfigId": "场景配置ID（任务类型）",
+  "sfcRequiredValidateEnable": true,
+  "persistentValidatorEnable": false,
+  "disableRequiredCfIds": []
+}
+```
+
+**字段说明：**
+
+| 字段 | 说明 |
+|------|------|
+| `_taskflowstatusId` | 目标工作流状态 ID（如已完成 `695b09c72eadc394afddb907`） |
+| `_scenariofieldconfigId` | 任务所属场景配置 ID，必须与任务类型一致 |
+| `sfcRequiredValidateEnable` | 是否校验目标状态的必填字段，默认 `true`；不想填必填值时设 `false` 可跳过校验 |
+| `persistentValidatorEnable` | 持久化校验，一般 `false` |
+| `disableRequiredCfIds` | 指定豁免必填校验的 customfieldId 列表 |
+
+**返回：** `200` 返回更新后的任务对象（含 `isDone`、`accomplished`、`taskflowstatus`）即成功。
+
+> ⚠️ **该接口只改状态，不写入 `customfields` / `startDate` / `dueDate`。** 即使 body 里带上这些字段也不生效，填业务字段请改用 `PUT /api/tasks/{taskId}`。
+
+### 跳过必填字段校验（批量标记完成常用）
+
+某些终态（如需求工作流的「已完成」）要求开始时间、截止时间、需求来源、需求价值分析、干系人分析、需求描述等字段必填，缺字段会返回 `400 MissingRequiredField`。若不想逐个填值，把 `sfcRequiredValidateEnable` 设为 `false` 即可强制改状态（字段留空）：
+
+```json
+{
+  "_taskflowstatusId": "695b09c72eadc394afddb907",
+  "_scenariofieldconfigId": "695b09c82eadc394afddbc59",
+  "sfcRequiredValidateEnable": false,
+  "persistentValidatorEnable": false,
+  "disableRequiredCfIds": []
+}
+```
+
+### 不要用这两个接口改状态（踩坑）
+
+| 错误接口 | 结果 |
+|------|------|
+| `PUT /api/tasks/{taskId}` + `{"_taskflowstatusId": "..."}` | 返回 `204` 但是**空操作**，状态不变（GET 验证仍是原状态，`updated` 不变） |
+| `PUT /api/tasks/{taskId}/isDone` + `{"isDone": true}` | 工作流项目返回 `400 NotSupportActionInTaskflowProject`（工作流项目不支持该操作） |
 
 ## 批量创建示例
 
@@ -450,12 +507,14 @@ for (const wt of WORK_TIMES) {
 
 ### 工作流状态（需求工作流）
 
-| 状态 | ID |
-|------|-----|
-| 待处理 | `695b09c72eadc394afddb904` |
-| 开发中 | `695b09c72eadc394afddb905` |
-| 已完成 | `695b09c72eadc394afddb906` |
-| 已验收 | `695b09c72eadc394afddb907` |
+> 终态「已完成」（`...907`，`kind: end`）用于标记任务完成；创建任务用起始态「待处理」（`...904`，`kind: start`）。
+
+| 状态 | ID | kind |
+|------|-----|------|
+| 待处理（起始） | `695b09c72eadc394afddb904` | start |
+| 开发中 | `695b09c72eadc394afddb905` | — |
+| 已验收 | `695b09c72eadc394afddb906` | — |
+| 已完成（终态） | `695b09c72eadc394afddb907` | end |
 
 ## 注意事项
 
@@ -464,6 +523,9 @@ for (const wt of WORK_TIMES) {
 3. 工时 API 必须携带 `x-organization-id` 和 `x-user-id` 请求头
 4. 批量操作时建议控制频率，避免触发限流
 5. 删除任务不可恢复，操作前请确认
+6. 改工作流状态必须用 `PUT /api/tasks/{id}/taskflowstatus`；`PUT /api/tasks/{id}` 带 `_taskflowstatusId` 是空操作（返回 204 但状态不变），`PUT /api/tasks/{id}/isDone` 在工作流项目返回 `400`
+7. 终态（如已完成）常带必填字段（开始/截止时间、需求来源等），缺值会报 `400 MissingRequiredField`；批量标记完成时把 `sfcRequiredValidateEnable` 设为 `false` 即可跳过校验
+8. `taskflowstatus` 接口只改状态，不会写入 `customfields`/`startDate`/`dueDate`，业务字段要用 `PUT /api/tasks/{id}` 单独填
 
 ## 操作经验
 
@@ -487,3 +549,17 @@ for (const wt of WORK_TIMES) {
 1. `DELETE /work-time-server/api/work-time/{recordId}` 删除错误条目
 2. `POST /work-time-server/api/work-time/batch` 重新添加正确条目
 3. 聚合查询验证修改后每天是否满 8h
+
+### 批量标记任务已完成
+
+登记完工时后把对应需求标为已完成的推荐流程：
+
+1. **确认终态状态 ID：** 用「已完成」（需求工作流为 `695b09c72eadc394afddb907`，`kind: end`）。注意本项目里 `907` 才是终态「已完成」，不是 `906`
+2. **逐个调用状态变更接口：** `PUT /api/tasks/{taskId}/taskflowstatus`，body 带 `_taskflowstatusId` + `_scenariofieldconfigId`，并把 `sfcRequiredValidateEnable` 设为 `false` 跳过必填字段校验（否则会被开始/截止时间、需求来源等必填项挡住）
+3. **并行批量：** 多个任务的状态变更互相独立，可在一次响应里并行发送加速
+4. **验证：** 用 GraphQL `tql: "isArchived = false AND executorId = \"...\" AND isDone = true"` 确认这些任务都已进入终态
+
+**常见错误：**
+- **误用 `PUT /api/tasks/{id}` 改状态：** 返回 204 但状态不变 → 解决：改用 `/taskflowstatus` 子接口
+- **误用 `/isDone`：** 工作流项目报 `NotSupportActionInTaskflowProject` → 解决：改用 `/taskflowstatus` 子接口
+- **被必填字段挡住：** 报 `MissingRequiredField` → 解决：`sfcRequiredValidateEnable: false` 跳过，或在 `disableRequiredCfIds` 里列出豁免的 customfieldId
