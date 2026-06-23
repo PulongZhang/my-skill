@@ -1,0 +1,4 @@
+interface:
+  display_name: "GIF Generator"
+  short_description: "Create clean green-screen based GIF animations"
+  default_prompt: "Use $gif-generator to turn these green-screen frames or sprite sheet into a clean looping GIF."
