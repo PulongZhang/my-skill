@@ -1,2 +1,4 @@
 .ace-tool/
 dist/
+__pycache__/
+*.pyc
