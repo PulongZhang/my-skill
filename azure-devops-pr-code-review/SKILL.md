@@ -1,18 +1,29 @@
 ---
-name: azure-devops-rest-api
-description: 当需要用 REST API 操作 on-prem Azure DevOps Server（TFS）的 Git 仓库与 Pull Request 时使用——批量收口评论、PR 数据拉取、按 commit 取文件做 diff、code review 自动化等。统一用 PAT 认证（不依赖浏览器登录态），涵盖 PR 评论线程（threads）、迭代与文件变更（iterations/changes）、取文件（items/blobs）等接口与本地 PAT 配置方案。
+name: azure-devops-pr-code-review
+description: 当需要对 on-prem Azure DevOps Server（TFS）Pull Request 做静态代码评审、拉取 PR 元数据/变更、用本地 git diff 阅读改动、生成中文评审结论，并在用户明确要求时通过 REST API 发布总结评论和行内评论时使用。默认只做静态评审：不运行测试、不启动服务、不改代码；REST API 是评审评论与 PR 数据操作的工具支撑，不是本 skill 的唯一目标。
 ---
 
-# Azure DevOps Server REST API（on-prem / TFS）
+# Azure DevOps PR 静态代码评审（on-prem / TFS）
 
-通过 PAT 认证调用 Azure DevOps Server（本地部署 TFS）的 Git REST API，操作仓库、Pull Request、评论与文件，用于 PR 数据拉取、批量评论/收口、按 commit 取文件做 diff 分析、code review 自动化等。
+用于对 Azure DevOps Server Pull Request 做静态代码评审：拉 PR 信息、读取 diff 与上下文、产出中文评审结论，并在用户明确要求时发布总结评论和行内评论。REST API/PAT 脚本是支撑 PR 数据拉取和评论发布的工具。
 
 ## 适用场景
 
-- 读取/操作 PR 评论线程（发评论、批量关闭、删除）
-- 拉 PR 的文件变更、提交、审阅者、状态
-- 按 commit / blob 取文件内容做 diff
-- 写自动化脚本（CI / 机器人）批量处理 PR
+- 用户说“代码评审下”“review 这个 PR”“静态评审”“作出评论/发到 PR”等，且目标是 Azure DevOps/TFS PR
+- 拉 PR 详情、提交、变更文件、`changeTrackingId`、审阅者、评论线程
+- 优先用本地 git diff 做静态评审；仓库不在本地时再用 REST `items`/`blobs` 取文件
+- 在用户明确要求发布时，向 PR 发总结评论和行内评论
+- 批量收口、删除、回复 PR 评论线程
+
+## 静态代码评审工作流（默认）
+
+1. 解析 PR URL/ID，拉取 PR 详情、提交、变更文件和 `changeTrackingId`。
+2. 若本地仓库可用，`git fetch` 后用三点 diff 阅读真实改动：`origin/<target>...origin/<source>`。
+3. 只做静态审查：读 diff 和必要上下文，判断正确性、安全、兼容性、i18n、边界条件、回归风险。
+4. 先形成中文评审结论；用户只说“评审/看看”时，先把结论发给用户，不直接发布到 PR。
+5. 用户明确说“发评论/作出评论/评论到 PR”时，再发布：每个具体问题 1 条行内评论 + 1 条总结评论。
+
+**默认禁止**：不要运行测试、构建、启动服务、修改业务代码或格式化文件；除非用户明确要求验证、修复或执行测试。
 
 ## API 基础信息
 
@@ -285,9 +296,10 @@ python scripts/azdo_client.py reviewers 36391
 
 ## 代码评审评论格式
 
-向 PR 发评审评论前，先读 [`references/code-review-format.md`](references/code-review-format.md) 并按其模板与原则。两条核心约定：
+向 PR 发评审评论前，先读 [`references/code-review-format.md`](references/code-review-format.md) 并按其模板与原则。核心约定：
 
-- **每次评审必须同时产出两类评论**：1 条总结评论（普通评论，覆盖全 PR）+ 每个具体问题 1 条行内评论（钉到 `file:line`），缺一不可。
+- **只有用户明确要求发布时才发到 PR**；否则先在对话中给出静态评审结论。
+- **每次发布到 PR 必须同时产出两类评论**：1 条总结评论（普通评论，覆盖全 PR）+ 每个具体问题 1 条行内评论（钉到 `file:line`），缺一不可。
 - 评论按严重程度分级、行首用 `【必改】`/`【建议】`/`【确认】`/`【提示】` 标注；每条给 `file:line` + 原因 + 具体修复；拿不准标 `【确认】` 不标 `【必改】`；主观偏好标 `【提示】` 且不强求。
 
 完整行内/总结模板与分级定义见该参考文件。
