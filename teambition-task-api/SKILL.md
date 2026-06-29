@@ -1,6 +1,6 @@
 ---
 name: teambition-task-api
-description: 使用 Teambition API 批量创建任务、添加工时、查询任务数据时调用。涵盖任务 CRUD、工时记录、项目配置查询等接口。
+description: 使用 Teambition API 批量创建任务、添加工时、查询任务数据时调用。涵盖任务 CRUD、工时记录、项目配置查询等接口。默认生成 F12 控制台脚本，不依赖额外 MCP（chrome-mcp-server 不稳定）。
 ---
 
 # Teambition 任务 API
@@ -18,11 +18,42 @@ description: 使用 Teambition API 批量创建任务、添加工时、查询任
 
 基础域名：当前 Teambition 实例地址（如 `https://tb.cet-electric.com:4753`）
 
-认证方式：浏览器环境下自动携带 `cookie` 和 `authorization`，无需手动处理。
+认证方式：所有接口都在 Teambition 同源页面下请求，浏览器自动携带 `cookie` 和 `authorization`，**无需手动处理认证，也无需任何 MCP**。工时相关接口额外需要 `x-organization-id` 和 `x-user-id` 两个自定义请求头。
 
-## 使用的 MCP 工具
+## 执行方式（默认：生成 F12 控制台脚本）
 
-通过 **Chrome MCP Server** 的 `chrome_network_request` 工具发送 API 请求。该工具会自动携带浏览器的登录态（cookie 和 authorization），无需手动处理认证。
+**常规路径不依赖任何 MCP**：Claude 把「查现状 → 计算 → 创建/登记 → 验证」整合成**一段完整可粘贴的 IIFE 脚本**，由用户在 Teambition 页面的浏览器控制台（F12）运行。脚本用相对路径 `fetch('/api/...')`，同源自动带登录态。
+
+步骤：
+
+1. 浏览器打开 `https://tb.cet-electric.com:4753` 任意页面，确认已登录
+2. `F12` → Console 控制台
+3. 粘贴脚本，回车执行；脚本末尾打印验证结果
+
+请求统一封装（工时接口必须带 `x-organization-id` / `x-user-id`）：
+
+```javascript
+const ORG_ID = '组织ID', USER_ID = '用户ID';
+async function api(path, { method='GET', body }={}) {
+  const res = await fetch(path, {
+    method,
+    headers: { 'Content-Type':'application/json', 'x-organization-id':ORG_ID, 'x-user-id':USER_ID },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const txt = await res.text(); let data; try { data = JSON.parse(txt); } catch { data = txt; }
+  if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}: ${txt}`);
+  return data;
+}
+// 例：const t = await api('/api/tasks', { method:'POST', body:{...} });
+```
+
+> 提示：生成脚本时让用户**只运行一次**；重复运行会重复建任务/工时。需要重跑时，先用脚本里打印出的任务 ID 删除旧数据。
+
+## 备选：Chrome MCP 工具（可选，非默认）
+
+> ⚠️ `chrome-mcp-server` 连接不稳定（常出现 `ConnectionRefused`）。**默认用上面的 F12 控制台方式**；仅当该 MCP 可用且希望 Claude 全自动执行（无需用户粘贴脚本）时才用此方式。
+
+通过 **Chrome MCP Server** 的 `chrome_network_request` 工具发送 API 请求，自动复用浏览器登录态。
 
 **工具名称：** `mcp__chrome-mcp-server__chrome_network_request`
 
@@ -563,3 +594,9 @@ for (const wt of WORK_TIMES) {
 - **误用 `PUT /api/tasks/{id}` 改状态：** 返回 204 但状态不变 → 解决：改用 `/taskflowstatus` 子接口
 - **误用 `/isDone`：** 工作流项目报 `NotSupportActionInTaskflowProject` → 解决：改用 `/taskflowstatus` 子接口
 - **被必填字段挡住：** 报 `MissingRequiredField` → 解决：`sfcRequiredValidateEnable: false` 跳过，或在 `disableRequiredCfIds` 里列出豁免的 customfieldId
+
+### 端到端脚本模板：按缺口把多天工时补到目标时长
+
+适用：根据 git 记录新建任务、标记已完成，并把指定日期工时补到每天目标时长（如 8h）。已有工时按缺口自动缩减，确保不超标。在 Teambition 页面 F12 控制台粘贴运行，**只跑一次**。
+
+完整脚本见 [`work-time-fill-template.js`](work-time-fill-template.js)：填好顶部【配置区】和 `TASKS` 计划后，复制整份文件到 F12 控制台运行。
