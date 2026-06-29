@@ -190,6 +190,30 @@ GET .../pullRequests/{prId}/iterations/{iterationId}/changes?api-version=5.0
 - `item.objectId` / `originalObjectId`：新/旧 blob ID
 - `changeType`：edit / add / delete
 
+## 取 PR 改动 diff：本地仓库优先用 git
+
+若评审的仓库已在本机检出（Claude Code 在仓库内运行的常见情况），**优先用本地 git 取 diff，不要走 REST 取文件**——更快、行号可直接用于行内评论、可 `--stat` 概览。
+
+### 三点 diff（PR 的真实改动）
+
+PR 改动 = 源分支相对目标分支分叉点以来的变更，用**三个点** `...`（merge-base diff）：
+
+```bash
+git fetch origin
+git diff origin/<目标分支>...origin/<源分支> --stat          # 概览
+git diff origin/<目标分支>...origin/<源分支> -- "<路径>"      # 指定文件
+```
+
+> 三个点 `...` 才是 PR 真实改动；两个点 `..` 是直接比较两端，会把目标分支期间的新提交也算进来，结果偏大。
+
+### 行号定位（行内评论用）
+
+直接看 diff 里 `+` 行号，或 `git show origin/<源分支>:<path> | grep -n "xxx"`，即为行内评论的 `--line`，无需 REST changes 推算。`changeTrackingId` 仍用 `pr-changes` 命令取。
+
+### 何时仍走 REST
+
+仓库不在本地、或要取某历史 commit/blob 的精确内容时，才用下文 `items`/`blobs` 接口或 `file-content` 命令。
+
 ## 三、获取文件内容
 
 取完整文件（页面 DOM 抓不全时用）：
@@ -251,7 +275,22 @@ python scripts/azdo_client.py file-content --path "/path/File.java" --commit 7e7
 
 # 列出 PR 迭代
 python scripts/azdo_client.py iterations 36391
+
+# 代码评审：拉 PR 数据（详情 / 提交 / 文件变更含 changeTrackingId / 审阅者）
+python scripts/azdo_client.py pr-detail 36391
+python scripts/azdo_client.py pr-commits 36391
+python scripts/azdo_client.py pr-changes 36391          # changeTrackingId 供行内评论用
+python scripts/azdo_client.py reviewers 36391
 ```
+
+## 代码评审评论格式
+
+向 PR 发评审评论前，先读 [`references/code-review-format.md`](references/code-review-format.md) 并按其模板与原则。两条核心约定：
+
+- **每次评审必须同时产出两类评论**：1 条总结评论（普通评论，覆盖全 PR）+ 每个具体问题 1 条行内评论（钉到 `file:line`），缺一不可。
+- 评论按严重程度分级、行首用 `【必改】`/`【建议】`/`【确认】`/`【提示】` 标注；每条给 `file:line` + 原因 + 具体修复；拿不准标 `【确认】` 不标 `【必改】`；主观偏好标 `【提示】` 且不强求。
+
+完整行内/总结模板与分级定义见该参考文件。
 
 ## 常用 ID / 路径速查
 
@@ -283,6 +322,7 @@ python scripts/azdo_client.py iterations 36391
 - **blobs 返回 "Binary data not displayed"**：blob 默认 octet-stream → 改用 items API
 - **创建后评论"消失"**：检查 `isDeleted`，可能被自动策略/他人删除
 - **自签名证书报错**：curl 加 `-k`，Python requests 设 `verify=False`
+- **Windows 脚本输出中文乱码**：控制台默认 GBK，脚本已强制 stdout 为 UTF-8；若环境变量覆盖仍乱码，设 `PYTHONUTF8=1` 或先 `chcp 65001` 再跑
 
 ## 安全实践
 

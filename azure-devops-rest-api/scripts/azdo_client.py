@@ -26,6 +26,12 @@ except ImportError:
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Windows 控制台默认 GBK，强制 stdout 用 UTF-8，避免中文输出乱码
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError):
+    pass
+
 CONFIG_PATH = os.path.expanduser("~/.config/azdo/config.json")
 API_VERSION = "5.0"
 
@@ -87,7 +93,10 @@ def cmd_add_comment(args):
             sys.exit("行内评论需要 --change-tracking-id（来自 iterations/{id}/changes）")
         body["pullRequestThreadContext"] = {
             "changeTrackingId": args.change_tracking_id,
-            "iterationContext": {"firstComparingIteration": 1, "secondComparingIteration": 1},
+            "iterationContext": {
+                "firstComparingIteration": args.iteration_from,
+                "secondComparingIteration": args.iteration_to,
+            },
         }
     url = f"{repo_base(args.cfg, args.repo)}/pullRequests/{args.pr_id}/threads?api-version={API_VERSION}"
     r = args.session.post(url, json=body)
@@ -122,6 +131,62 @@ def cmd_iterations(args):
         print(f"iteration {it['id']}: source={src} target={tgt}")
 
 
+def cmd_pr_detail(args):
+    url = f"{repo_base(args.cfg, args.repo)}/pullRequests/{args.pr_id}?api-version={API_VERSION}"
+    r = args.session.get(url)
+    r.raise_for_status()
+    pr = r.json()
+    print(f"title       : {pr.get('title')}")
+    print(f"status      : {pr.get('status')}")
+    print(f"createdBy   : {(pr.get('createdBy') or {}).get('displayName')}")
+    print(f"sourceRef   : {pr.get('sourceRefName')}")
+    print(f"targetRef   : {pr.get('targetRefName')}")
+    print(f"mergeStatus : {pr.get('mergeStatus')}")
+    print(f"sourceCommit: {(pr.get('lastMergeSourceCommit') or {}).get('commitId')}")
+    print(f"targetCommit: {(pr.get('lastMergeTargetCommit') or {}).get('commitId')}")
+
+
+def cmd_pr_commits(args):
+    url = f"{repo_base(args.cfg, args.repo)}/pullRequests/{args.pr_id}/commits?api-version={API_VERSION}"
+    r = args.session.get(url)
+    r.raise_for_status()
+    for c in r.json().get("value", []):
+        cid = (c.get("commitId") or "")[:10]
+        author = (c.get("author") or {}).get("name")
+        raw = (c.get("comment") or "").strip()
+        comment = raw.splitlines()[0] if raw else ""
+        print(f"{cid} {author}: {comment[:80]}")
+
+
+def _latest_iteration_id(args):
+    url = f"{repo_base(args.cfg, args.repo)}/pullRequests/{args.pr_id}/iterations?api-version={API_VERSION}"
+    r = args.session.get(url)
+    r.raise_for_status()
+    its = r.json().get("value", [])
+    if not its:
+        sys.exit("该 PR 没有迭代数据")
+    return its[-1]["id"]
+
+
+def cmd_pr_changes(args):
+    iteration_id = args.iteration if args.iteration is not None else _latest_iteration_id(args)
+    url = (f"{repo_base(args.cfg, args.repo)}/pullRequests/{args.pr_id}"
+           f"/iterations/{iteration_id}/changes?api-version={API_VERSION}")
+    r = args.session.get(url)
+    r.raise_for_status()
+    for e in r.json().get("changeEntries", []):
+        item = e.get("item", {})
+        print(f"[{e.get('changeTrackingId')}] {e.get('changeType')} {item.get('path')}")
+
+
+def cmd_reviewers(args):
+    url = f"{repo_base(args.cfg, args.repo)}/pullRequests/{args.pr_id}/reviewers?api-version={API_VERSION}"
+    r = args.session.get(url)
+    r.raise_for_status()
+    for rv in r.json().get("value", []):
+        print(f"{rv.get('displayName')} vote={rv.get('vote')}")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Azure DevOps Server REST API 客户端（PAT 从本地配置读取）")
     parser.add_argument("--repo", default=None, help="仓库名（默认用配置里的 defaultRepo）")
@@ -138,6 +203,10 @@ def build_parser():
     sp.add_argument("--line", type=int, help="行内评论定位的行号")
     sp.add_argument("--offset", type=int, default=73, help="rightFileEnd.offset，默认 73")
     sp.add_argument("--change-tracking-id", type=int, help="行内评论的 changeTrackingId")
+    sp.add_argument("--iteration-from", type=int, default=1,
+                    help="iterationContext.firstComparingIteration，默认 1（多迭代 PR 行内评论定位偏移时按 iterations 输出调整）")
+    sp.add_argument("--iteration-to", type=int, default=1,
+                    help="iterationContext.secondComparingIteration，默认 1")
     sp.add_argument("--content", required=True, help="评论内容")
     sp.set_defaults(func=cmd_add_comment)
 
@@ -155,6 +224,23 @@ def build_parser():
     sp = sub.add_parser("iterations", help="列出 PR 迭代")
     sp.add_argument("pr_id")
     sp.set_defaults(func=cmd_iterations)
+
+    sp = sub.add_parser("pr-detail", help="PR 详情（标题/状态/分支/merge commit）")
+    sp.add_argument("pr_id")
+    sp.set_defaults(func=cmd_pr_detail)
+
+    sp = sub.add_parser("pr-commits", help="PR 提交记录")
+    sp.add_argument("pr_id")
+    sp.set_defaults(func=cmd_pr_commits)
+
+    sp = sub.add_parser("pr-changes", help="PR 文件变更清单（含 changeTrackingId，默认最新迭代）")
+    sp.add_argument("pr_id")
+    sp.add_argument("--iteration", type=int, default=None, help="指定迭代号，缺省取最新")
+    sp.set_defaults(func=cmd_pr_changes)
+
+    sp = sub.add_parser("reviewers", help="PR 审阅者及投票")
+    sp.add_argument("pr_id")
+    sp.set_defaults(func=cmd_reviewers)
 
     return parser
 
