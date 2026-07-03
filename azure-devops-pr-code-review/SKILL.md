@@ -278,6 +278,16 @@ python scripts/azdo_client.py pr-threads 36391
 # 行内评论
 python scripts/azdo_client.py add-comment 36391 --file "/path/File.java" --line 31 --change-tracking-id 3 --content "【必改】..."
 
+# 长内容评论（含 markdown 反引号/$/换行）：优先 stdin（--content -）或 --content-file，
+# 避免命令行 --content 被 shell 转义破坏；heredoc 用带引号的 'EOF' 禁用一切展开
+python scripts/azdo_client.py add-comment 36391 --content - <<'EOF'
+【代码评审 · PR 36391 · 可合并】
+修复正确。`LanguageUtil.getLanguage()` ... 含 $、'引号'、换行均原样传入。
+EOF
+
+# 或从文件读（适合先用编辑器/工具写好长评审再发）
+python scripts/azdo_client.py add-comment 36391 --content-file review.md
+
 # 删除评论
 python scripts/azdo_client.py del-comment 36391 205707 1
 
@@ -293,6 +303,8 @@ python scripts/azdo_client.py pr-commits 36391
 python scripts/azdo_client.py pr-changes 36391          # changeTrackingId 供行内评论用
 python scripts/azdo_client.py reviewers 36391
 ```
+
+> **长内容勿走 `--content` 字面值**：含反引号（shell 命令替换）、`$`（变量展开）、单引号（字符串断裂）或超长的评论，经命令行 `--content "..."` 传参会被 shell 破坏或触发 ARG_MAX。统一用 `--content -`（stdin + `<<'EOF'`）或 `--content-file`；短评论仍可用 `--content "..."`。
 
 ## 代码评审评论格式
 
@@ -336,6 +348,7 @@ python scripts/azdo_client.py reviewers 36391
 - **创建后评论"消失"**：检查 `isDeleted`，可能被自动策略/他人删除
 - **自签名证书报错**：curl 加 `-k`，Python requests 设 `verify=False`
 - **Windows 脚本输出中文乱码**：控制台默认 GBK，脚本已强制 stdout 为 UTF-8；若环境变量覆盖仍乱码，设 `PYTHONUTF8=1` 或先 `chcp 65001` 再跑
+- **长评论内容被破坏/截断**：含反引号、`$`、单引号的 markdown 经 `--content "..."` 传参被 shell 转义 → 改用 `--content -`（stdin + `<<'EOF'` heredoc）或 `--content-file`
 
 ## 安全实践
 

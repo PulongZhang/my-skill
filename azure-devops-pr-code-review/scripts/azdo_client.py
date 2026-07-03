@@ -78,9 +78,22 @@ def cmd_pr_threads(args):
               f"deleted={t.get('isDeleted')} | {content}")
 
 
+def _read_content(args):
+    """评论内容来源：--content-file > --content -（stdin）> --content 字面值。
+    长内容（含 markdown 反引号/$/换行）优先用 stdin 或文件，避免命令行转义。"""
+    if getattr(args, "content_file", None):
+        with open(args.content_file, "r", encoding="utf-8") as f:
+            return f.read()
+    if args.content == "-":
+        return sys.stdin.read()
+    return args.content
+
+
 def cmd_add_comment(args):
+    if args.content is None and not getattr(args, "content_file", None):
+        sys.exit("需要评论内容：用 --content、--content -（stdin）或 --content-file 之一")
     body = {
-        "comments": [{"commentType": 1, "content": args.content}],
+        "comments": [{"commentType": 1, "content": _read_content(args)}],
         "status": 1,
     }
     if args.file:
@@ -207,7 +220,8 @@ def build_parser():
                     help="iterationContext.firstComparingIteration，默认 1（多迭代 PR 行内评论定位偏移时按 iterations 输出调整）")
     sp.add_argument("--iteration-to", type=int, default=1,
                     help="iterationContext.secondComparingIteration，默认 1")
-    sp.add_argument("--content", required=True, help="评论内容")
+    sp.add_argument("--content", help="评论内容；传 - 从 stdin 读（推荐用于长 markdown，配合 <<'EOF' heredoc）")
+    sp.add_argument("--content-file", help="评论内容文件路径（与 --content 二选一，适合长 markdown）")
     sp.set_defaults(func=cmd_add_comment)
 
     sp = sub.add_parser("del-comment", help="删除评论（软删除）")
