@@ -321,6 +321,19 @@ python scripts/azdo_client.py reviewers 36391
 
 完整行内模板、对话结论模板与分级定义见该参考文件。
 
+## PR 描述模板
+
+帮作者写或补 PR 描述时，先读 [`references/pr-description-template.md`](references/pr-description-template.md) 并按其六段结构填写。核心约定：
+
+- **六段**：Context 背景 / Description 说明 / Changes 变更内容 / Outside Changes 代码库外变更 / Test & Risk 自测与风险 / 代码来源声明。
+- **直接写正文**：填实际内容时不保留 placeholder 提示词（"为什么要改："、"怎么实现："等），标题已说明该写什么。
+- **标注来源**：`Changes` 每条行内打 `【AI】` / `【人工】` / `【AI·人工修订】`，末尾"代码来源声明"汇总整体 AI / 人工比例。
+- **单一职责**：一个 PR 只围绕一件事；后端不卡文件数硬门槛。
+
+更新远端描述用 `scripts/azdo_client.py update-pr` 命令（封装了 `PATCH .../pullrequests/{prId}`，用法见该参考文件）。
+
+完整模板、标注规则与填写示例见该参考文件。
+
 ## 常用 ID / 路径速查
 
 | 项 | 值 |

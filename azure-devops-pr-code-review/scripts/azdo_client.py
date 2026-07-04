@@ -78,15 +78,18 @@ def cmd_pr_threads(args):
               f"deleted={t.get('isDeleted')} | {content}")
 
 
-def _read_content(args):
-    """评论内容来源：--content-file > --content -（stdin）> --content 字面值。
-    长内容（含 markdown 反引号/$/换行）优先用 stdin 或文件，避免命令行转义。"""
-    if getattr(args, "content_file", None):
-        with open(args.content_file, "r", encoding="utf-8") as f:
+def _read_content(args, content_attr="content", file_attr="content_file"):
+    """文本内容来源：--<file> > --<content> -（stdin）> --<content> 字面值。
+    长内容（含 markdown 反引号/$/换行）优先用 stdin 或文件，避免命令行转义。
+    content_attr/file_attr 用于复用到 update-pr 的 --description/--description-file。"""
+    file_val = getattr(args, file_attr, None)
+    if file_val:
+        with open(file_val, "r", encoding="utf-8") as f:
             return f.read()
-    if args.content == "-":
+    content_val = getattr(args, content_attr, None)
+    if content_val == "-":
         return sys.stdin.read()
-    return args.content
+    return content_val
 
 
 def cmd_add_comment(args):
@@ -200,6 +203,26 @@ def cmd_reviewers(args):
         print(f"{rv.get('displayName')} vote={rv.get('vote')}")
 
 
+def cmd_update_pr(args):
+    has_desc = args.description is not None or args.description_file is not None
+    body = {}
+    if has_desc:
+        body["description"] = _read_content(args, "description", "description_file")
+    if args.title is not None:
+        body["title"] = args.title
+    if not body:
+        sys.exit("需要至少一个更新字段：--description（或 --description-file）或 --title")
+    url = f"{repo_base(args.cfg, args.repo)}/pullrequests/{args.pr_id}?api-version={API_VERSION}"
+    r = args.session.patch(url, json=body)
+    r.raise_for_status()
+    pr = r.json()
+    print(f"已更新 PR {args.pr_id}")
+    if "title" in body:
+        print(f"title       : {pr.get('title')}")
+    if "description" in body:
+        print(f"description : {len(pr.get('description') or '')} 字符")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Azure DevOps Server REST API 客户端（PAT 从本地配置读取）")
     parser.add_argument("--repo", default=None, help="仓库名（默认用配置里的 defaultRepo）")
@@ -255,6 +278,13 @@ def build_parser():
     sp = sub.add_parser("reviewers", help="PR 审阅者及投票")
     sp.add_argument("pr_id")
     sp.set_defaults(func=cmd_reviewers)
+
+    sp = sub.add_parser("update-pr", help="更新 PR（描述 / 标题）")
+    sp.add_argument("pr_id")
+    sp.add_argument("--description", help="新的 PR 描述；传 - 从 stdin 读（长 markdown 推荐，配合 <<'EOF' heredoc）")
+    sp.add_argument("--description-file", help="从文件读 PR 描述（与 --description 二选一，适合长 markdown）")
+    sp.add_argument("--title", help="新的 PR 标题")
+    sp.set_defaults(func=cmd_update_pr)
 
     return parser
 
