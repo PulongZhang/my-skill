@@ -26,9 +26,12 @@ except ImportError:
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Windows 控制台默认 GBK，强制 stdout 用 UTF-8，避免中文输出乱码
+# Windows 控制台默认 GBK，强制 stdin/stdout 用 UTF-8，避免中文输入输出乱码
+# stdin 尤其关键：create-pr/update-pr/add-comment 用 --content - / --description - 从 heredoc
+# 读中文时，默认 GBK 解码 UTF-8 字节会得到乱码再 POST 出去
 try:
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdin.reconfigure(encoding="utf-8")
 except (AttributeError, ValueError):
     pass
 
