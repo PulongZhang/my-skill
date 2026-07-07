@@ -66,8 +66,8 @@ Rules:
 - Do not use personal pronouns such as“我”“我们”“本人”.
 - Do not use the Chinese character “了”.
 - Do not use order-linking words such as“首先”“其次”“然后”“最后”.
-- Do not use metaphors, exaggeration, slogans, or English except necessary technical terms.
-- Do not overemphasize implementation details; keep technical details only when needed to identify the work.
+- Do not use metaphors, exaggeration, slogans, or English. Translate technical terms to Chinese where there is a natural equivalent (接口、字段、配置、流程、日志), and keep an English term only when it is a proper noun with no common Chinese name.
+- Do not overemphasize implementation details. Avoid file paths, class/function/variable names, code snippets, stack traces, or log/SQL fragments in the body; mention a name only when it is the only way to identify which piece of work is meant.
 
 ## Diligent Time
 
@@ -90,6 +90,22 @@ Cover these elements in prose:
 - Difficulties: unclear fields, missing data, inconsistent returns, dependency issues, import errors, failing tests, ambiguous rules, or incomplete inputs.
 - Resolution: concrete actions taken, such as locating paths, comparing data, adjusting mapping, replacing wording, running checks, or rechecking outputs.
 - Reflection: describe observed challenges, constraints, remaining gaps, and follow-up items, not value or benefit.
+
+## Body Paragraph Style
+
+Body paragraphs should read like plain Chinese workplace prose that a colleague outside the codebase could follow. The goal is to describe what was done and where it sits in the work, not to reproduce the code. Explain in accessible terms (深入浅出): state the problem, the action, and the work's position, so a reader not familiar with the code can understand. Prefer describing purpose and role over mechanism.
+
+Good:
+
+```text
+该接口负责返回审批列表，部分请求返回的字段与配置不一致。经核对，定位到字段来源配置与返回逻辑存在差异，调整字段映射，并复查空值场景。
+```
+
+Bad — too much code detail and English, reads like a code review instead of a daily note:
+
+```text
+getApprovalList接口的DTO映射有问题，approvalList字段返回null，debug发现ListMapper.toDTO里fieldMapping有bug，refactor后fix。
+```
 
 ## Meaning Without Evaluation
 
@@ -152,5 +168,6 @@ Before answering, scan the draft for:
 - No Chinese character “了” appears.
 - No“首先/其次/然后/最后”appear.
 - Reflection describes facts, constraints, challenges, and follow-up work instead of benefits or impact.
+- Body paragraphs carry minimal code-level detail (no paths, names, snippets, traces) and minimal English, and stay readable for someone outside the codebase.
 
 If any check fails, revise before output.
