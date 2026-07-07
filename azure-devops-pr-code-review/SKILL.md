@@ -300,6 +300,12 @@ python scripts/azdo_client.py file-content --path "/path/File.java" --commit 7e7
 # 列出 PR 迭代
 python scripts/azdo_client.py iterations 36391
 
+# 创建 PR（源分支 -> 目标分支；分支名自动补 refs/heads/）
+python scripts/azdo_client.py create-pr --source feature/x --target main \
+  --title "feat(bpm): 新增 xxx" --description - <<'EOF'
+<markdown 描述>
+EOF
+
 # 代码评审：拉 PR 数据（详情 / 提交 / 文件变更含 changeTrackingId / 审阅者）
 python scripts/azdo_client.py pr-detail 36391
 python scripts/azdo_client.py pr-commits 36391
@@ -318,6 +324,7 @@ python scripts/azdo_client.py reviewers 36391
 - **永远不要发布总结评论**：不要创建普通总结线程；`【建议】`/`【确认】`/`【提示】`/已核对无问题项只在对话结论里给用户看，不发到 PR。
 - **没有 `【必改】` 就不发布任何 PR 评论**：即使用户要求“评论到 PR”，也告知“无必改，不发布 PR 评论”。
 - 评论按严重程度分级、行首用 `【必改】` / `【建议】` / `【确认】` / `【提示】` 标注；每条给 `file:line` + 原因 + 具体修复；拿不准标 `【确认】` 不标 `【必改】`；主观偏好标 `【提示】` 且不强求。
+- **文字风格（深入浅出）**：评审文字中文撰写，能用中文表达的概念不用英文（类名/方法名/字段名等标识符保留原文）；讲清问题与影响用平实的话，不堆大段代码贴片。
 
 完整行内模板、对话结论模板与分级定义见该参考文件。
 
@@ -329,6 +336,7 @@ python scripts/azdo_client.py reviewers 36391
 - **直接写正文**：填实际内容时不保留 placeholder 提示词（"为什么要改："、"怎么实现："等），标题已说明该写什么。
 - **标注来源**：`Changes` 每条行内打 `【AI】` / `【人工】` / `【AI·人工修订】`，末尾"代码来源声明"汇总整体 AI / 人工比例。
 - **单一职责**：一个 PR 只围绕一件事；后端不卡文件数硬门槛。
+- **文字风格（深入浅出）**：描述中文撰写，能用中文表达的概念不用英文（标识符保留原文）；背景与风险用平实的话讲清，不堆大段代码贴片。
 
 更新远端描述用 `scripts/azdo_client.py update-pr` 命令（封装了 `PATCH .../pullrequests/{prId}`，用法见该参考文件）。
 

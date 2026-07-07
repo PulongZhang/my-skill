@@ -223,6 +223,29 @@ def cmd_update_pr(args):
         print(f"description : {len(pr.get('description') or '')} 字符")
 
 
+def _normalize_ref(ref):
+    """分支名补全为 refs/heads/<name>；已是完整引用（refs/...）则原样返回。"""
+    return ref if ref.startswith("refs/") else f"refs/heads/{ref}"
+
+
+def cmd_create_pr(args):
+    body = {
+        "sourceRefName": _normalize_ref(args.source),
+        "targetRefName": _normalize_ref(args.target),
+    }
+    if args.title is not None:
+        body["title"] = args.title
+    has_desc = args.description is not None or args.description_file is not None
+    if has_desc:
+        body["description"] = _read_content(args, "description", "description_file")
+    url = f"{repo_base(args.cfg, args.repo)}/pullrequests?api-version={API_VERSION}"
+    r = args.session.post(url, json=body)
+    r.raise_for_status()
+    pr = r.json()
+    print(f"已创建 PR {pr.get('pullRequestId')}: {pr.get('title')}")
+    print(f"  {pr.get('sourceRefName')} -> {pr.get('targetRefName')}")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Azure DevOps Server REST API 客户端（PAT 从本地配置读取）")
     parser.add_argument("--repo", default=None, help="仓库名（默认用配置里的 defaultRepo）")
@@ -285,6 +308,14 @@ def build_parser():
     sp.add_argument("--description-file", help="从文件读 PR 描述（与 --description 二选一，适合长 markdown）")
     sp.add_argument("--title", help="新的 PR 标题")
     sp.set_defaults(func=cmd_update_pr)
+
+    sp = sub.add_parser("create-pr", help="创建 PR（从源分支合并到目标分支）")
+    sp.add_argument("--source", required=True, help="源分支名（如 feature/x），自动补 refs/heads/")
+    sp.add_argument("--target", required=True, help="目标分支名（如 main），自动补 refs/heads/")
+    sp.add_argument("--title", help="PR 标题")
+    sp.add_argument("--description", help="PR 描述；传 - 从 stdin 读（长 markdown 推荐，配合 <<'EOF' heredoc）")
+    sp.add_argument("--description-file", help="从文件读 PR 描述（与 --description 二选一）")
+    sp.set_defaults(func=cmd_create_pr)
 
     return parser
 
