@@ -302,14 +302,14 @@ python scripts/azdo_client.py iterations 36391
 
 # 创建 PR（源分支 -> 目标分支；分支名自动补 refs/heads/）
 # 描述内容按 references/pr-description-template.md 准备；创建 PR 的背景/说明边界见该文件同名章节。
-# 默认远端描述使用不含 Context/Description 的裁剪版描述文件，背景/说明在对话里给人工粘贴参考。
+# 远端描述保留完整六段；其中 Context 背景 / Description 说明 正文默认写"人工编写中"占位，真实正文在对话里给人工参考。
 python scripts/azdo_client.py create-pr --source feature/x --target main \
   --title "feat(bpm): 新增 xxx" --description-file pr-description.remote.md
 
-# 或从 stdin 读远端描述；EOF 内同样只放远端描述，不放对话参考内容
+# 或从 stdin 读远端描述；Context/Description 正文默认占位为"人工编写中"
 python scripts/azdo_client.py create-pr --source feature/x --target main \
   --title "feat(bpm): 新增 xxx" --description - <<'EOF'
-<按模板填写的远端描述，不包含 Context 背景 / Description 说明>
+<按模板填写的远端描述；Context 背景 / Description 说明 正文写"人工编写中"占位>
 EOF
 
 # 代码评审：拉 PR 数据（详情 / 提交 / 文件变更含 changeTrackingId / 审阅者）
@@ -339,7 +339,7 @@ python scripts/azdo_client.py reviewers 36391
 帮作者写或补 PR 描述时，先读 [`references/pr-description-template.md`](references/pr-description-template.md) 并按其六段结构填写。核心约定：
 
 - **六段**：Context 背景 / Description 说明 / Changes 变更内容 / Outside Changes 代码库外变更 / Test & Risk 自测与风险 / 代码来源声明。
-- **创建 PR 边界**：新建 PR 时必须遵守参考文件的“创建 PR 时的背景/说明边界”；默认仅把 `Context` / `Description` 留在对话参考中，远端描述仍保留其余四段，例外条件以参考文件为准。
+- **创建 PR 边界**：新建 PR 时必须遵守参考文件的“创建 PR 时的背景/说明边界”；远端描述保留完整六段结构，但 `Context 背景` / `Description 说明` 正文默认写 `人工编写中` 占位，真实正文在对话里给人工参考粘贴；例外条件以参考文件为准。
 - **直接写正文**：填实际内容时不保留 placeholder 提示词（"为什么要改："、"怎么实现："等），标题已说明该写什么。
 - **标注来源**：`Changes` 每条行内打 `【AI】` / `【人工】` / `【AI·人工修订】`，末尾"代码来源声明"汇总整体 AI / 人工比例。
 - **单一职责**：一个 PR 只围绕一件事；后端不卡文件数硬门槛。
