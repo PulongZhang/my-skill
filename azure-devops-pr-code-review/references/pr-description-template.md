@@ -79,6 +79,14 @@ PATCH {repo_base}/pullrequests/{prId}?api-version=5.0
 body: {"description": "<markdown 内容>"}
 ```
 
+> **更新流程：先 GET 现状，合并后整体写回，禁止直接覆盖。** `PATCH description` 是整体覆盖整个描述字段。更新已有 PR 描述时必须：
+
+1. **取现状**：`python scripts/azdo_client.py pr-detail <prId> --description` 获取当前完整 description 原文。
+2. **合并**：在现有 description 基础上只改动需要更新的段落，**保留其余段落不变**；不要只传要改的部分，否则未提及的段落会被覆盖丢失。
+3. **整体写回**：用合并后的完整 description 执行 `update-pr --description -` / `--description-file`。
+
+只有新建 PR（`create-pr`）或用户明确要求"完全替换描述"时，才直接传一份全新描述；否则一律走"取现状 → 合并 → 写回"。
+
 用 `scripts/azdo_client.py` 的 `update-pr` 命令（封装了上述 PATCH，PAT 自动从本地配置读取，不进命令行与日志）：
 
 ```bash

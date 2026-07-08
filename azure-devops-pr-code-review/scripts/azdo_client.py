@@ -163,6 +163,10 @@ def cmd_pr_detail(args):
     print(f"mergeStatus : {pr.get('mergeStatus')}")
     print(f"sourceCommit: {(pr.get('lastMergeSourceCommit') or {}).get('commitId')}")
     print(f"targetCommit: {(pr.get('lastMergeTargetCommit') or {}).get('commitId')}")
+    if getattr(args, "description", False):
+        # 输出当前 description 原文，供 update-pr 前取现状、合并后整体写回
+        print("description :")
+        print(pr.get("description") or "")
 
 
 def cmd_pr_commits(args):
@@ -290,6 +294,8 @@ def build_parser():
 
     sp = sub.add_parser("pr-detail", help="PR 详情（标题/状态/分支/merge commit）")
     sp.add_argument("pr_id")
+    sp.add_argument("--description", action="store_true",
+                    help="同时输出当前 description 原文（update-pr 前取现状、合并后整体写回）")
     sp.set_defaults(func=cmd_pr_detail)
 
     sp = sub.add_parser("pr-commits", help="PR 提交记录")

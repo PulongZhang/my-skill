@@ -345,7 +345,7 @@ python scripts/azdo_client.py reviewers 36391
 - **单一职责**：一个 PR 只围绕一件事；后端不卡文件数硬门槛。
 - **文字风格（深入浅出）**：描述中文撰写，能用中文表达的概念不用英文（标识符保留原文）；背景与风险用平实的话讲清，不堆大段代码贴片。
 
-更新已有 PR 描述用 `scripts/azdo_client.py update-pr` 命令（封装了 `PATCH .../pullrequests/{prId}`，用法见该参考文件）；新建 PR 的描述边界以上述参考文件为准。
+更新已有 PR 描述用 `scripts/azdo_client.py update-pr` 命令；`update-pr --description` 是整体覆盖，更新前必须先 `pr-detail <prId> --description` 取现状、合并保留既有段落后再整体写回，禁止直接用部分内容覆盖（新建 PR 用 `create-pr`，描述边界以上述参考文件为准）。
 
 完整模板、标注规则与填写示例见该参考文件。
 
