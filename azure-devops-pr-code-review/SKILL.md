@@ -1,6 +1,6 @@
 ---
 name: azure-devops-pr-code-review
-description: 当需要对 on-prem Azure DevOps Server（TFS）Pull Request 做静态代码评审、拉取 PR 元数据/变更、用本地 git diff 阅读改动、生成中文评审结论，并在用户明确要求时只通过 REST API 发布【必改】行内评论时使用。默认只做静态评审：不运行测试、不启动服务、不改代码；REST API 是评审评论与 PR 数据操作的工具支撑，不是本 skill 的唯一目标。
+description: 当需要对 on-prem Azure DevOps Server（TFS）Pull Request 做静态代码评审、拉取 PR 元数据/变更、创建 PR、更新 PR 标题/描述、用本地 git diff 阅读改动、生成中文 PR 描述或评审结论，并在用户明确要求时只通过 REST API 发布【必改】行内评论时使用。默认只做静态评审：不运行测试、不启动服务、不改代码；REST API 是评审评论与 PR 数据操作的工具支撑，不是本 skill 的唯一目标。
 ---
 
 # Azure DevOps PR 静态代码评审（on-prem / TFS）
@@ -301,9 +301,15 @@ python scripts/azdo_client.py file-content --path "/path/File.java" --commit 7e7
 python scripts/azdo_client.py iterations 36391
 
 # 创建 PR（源分支 -> 目标分支；分支名自动补 refs/heads/）
+# 描述内容按 references/pr-description-template.md 准备；创建 PR 的背景/说明边界见该文件同名章节。
+# 默认远端描述使用不含 Context/Description 的裁剪版描述文件，背景/说明在对话里给人工粘贴参考。
+python scripts/azdo_client.py create-pr --source feature/x --target main \
+  --title "feat(bpm): 新增 xxx" --description-file pr-description.remote.md
+
+# 或从 stdin 读远端描述；EOF 内同样只放远端描述，不放对话参考内容
 python scripts/azdo_client.py create-pr --source feature/x --target main \
   --title "feat(bpm): 新增 xxx" --description - <<'EOF'
-<markdown 描述>
+<按模板填写的远端描述，不包含 Context 背景 / Description 说明>
 EOF
 
 # 代码评审：拉 PR 数据（详情 / 提交 / 文件变更含 changeTrackingId / 审阅者）
@@ -333,12 +339,13 @@ python scripts/azdo_client.py reviewers 36391
 帮作者写或补 PR 描述时，先读 [`references/pr-description-template.md`](references/pr-description-template.md) 并按其六段结构填写。核心约定：
 
 - **六段**：Context 背景 / Description 说明 / Changes 变更内容 / Outside Changes 代码库外变更 / Test & Risk 自测与风险 / 代码来源声明。
+- **创建 PR 边界**：新建 PR 时必须遵守参考文件的“创建 PR 时的背景/说明边界”；默认仅把 `Context` / `Description` 留在对话参考中，远端描述仍保留其余四段，例外条件以参考文件为准。
 - **直接写正文**：填实际内容时不保留 placeholder 提示词（"为什么要改："、"怎么实现："等），标题已说明该写什么。
 - **标注来源**：`Changes` 每条行内打 `【AI】` / `【人工】` / `【AI·人工修订】`，末尾"代码来源声明"汇总整体 AI / 人工比例。
 - **单一职责**：一个 PR 只围绕一件事；后端不卡文件数硬门槛。
 - **文字风格（深入浅出）**：描述中文撰写，能用中文表达的概念不用英文（标识符保留原文）；背景与风险用平实的话讲清，不堆大段代码贴片。
 
-更新远端描述用 `scripts/azdo_client.py update-pr` 命令（封装了 `PATCH .../pullrequests/{prId}`，用法见该参考文件）。
+更新已有 PR 描述用 `scripts/azdo_client.py update-pr` 命令（封装了 `PATCH .../pullrequests/{prId}`，用法见该参考文件）；新建 PR 的描述边界以上述参考文件为准。
 
 完整模板、标注规则与填写示例见该参考文件。
 

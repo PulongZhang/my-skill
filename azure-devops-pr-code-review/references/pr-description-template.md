@@ -39,6 +39,16 @@
 <汇总本 PR 的 AI / 人工产出比例>
 ```
 
+## 创建 PR 时的背景/说明边界
+
+用 `create-pr` 新建 PR 时，默认**不要**把 `## Context 背景` 和 `## Description 说明` 直接写进远端 PR 描述。做法是：
+
+1. 远端 PR 描述保留其余四段：`Changes` / `Outside Changes` / `Test & Risk` / `代码来源声明`。
+2. 在对话里另给“背景/说明参考”，请人工确认后自行粘贴到 PR 页面。
+3. 只有用户明确要求“直接写入”“强制写入”或“创建时填完整描述”时，才把 `Context` / `Description` 一并放入 `create-pr --description`。
+
+该边界只约束“创建 PR”的默认动作。用户明确要求补写或更新已有 PR 描述时，可按完整六段结构写入远端；注意 `update-pr --description` 是整体覆盖描述字段，更新前应保留既有段落，避免只传 `Context` / `Description` 导致其他段落被覆盖。
+
 ## AI / 人工来源标注
 
 `Changes` 每条行内打标签，让评审者逐条看到来源；末尾"代码来源声明"做整体汇总。
