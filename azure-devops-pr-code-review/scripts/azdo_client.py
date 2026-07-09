@@ -230,6 +230,23 @@ def cmd_update_pr(args):
         print(f"description : {len(pr.get('description') or '')} 字符")
 
 
+def _set_pr_auto_complete(args, pr_id, pr):
+    created_by_id = (pr.get("createdBy") or {}).get("id")
+    if not created_by_id:
+        sys.exit(f"已创建 PR {pr_id}，但响应缺少 createdBy.id，无法设置自动完成")
+    body = {
+        "autoCompleteSetBy": {"id": created_by_id},
+        "completionOptions": {
+            "deleteSourceBranch": bool(args.delete_source_branch),
+        },
+    }
+    url = f"{repo_base(args.cfg, args.repo)}/pullrequests/{pr_id}?api-version={API_VERSION}"
+    r = args.session.patch(url, json=body)
+    r.raise_for_status()
+    delete_msg = "是" if args.delete_source_branch else "否"
+    print(f"已设置自动完成（删除源分支：{delete_msg}）")
+
+
 def _normalize_ref(ref):
     """分支名补全为 refs/heads/<name>；已是完整引用（refs/...）则原样返回。"""
     return ref if ref.startswith("refs/") else f"refs/heads/{ref}"
@@ -249,8 +266,12 @@ def cmd_create_pr(args):
     r = args.session.post(url, json=body)
     r.raise_for_status()
     pr = r.json()
-    print(f"已创建 PR {pr.get('pullRequestId')}: {pr.get('title')}")
+    pr_id = pr.get("pullRequestId")
+    if pr_id is None:
+        sys.exit("创建 PR 成功，但响应缺少 pullRequestId，无法设置自动完成")
+    print(f"已创建 PR {pr_id}: {pr.get('title')}")
     print(f"  {pr.get('sourceRefName')} -> {pr.get('targetRefName')}")
+    _set_pr_auto_complete(args, pr_id, pr)
 
 
 def build_parser():
@@ -324,6 +345,8 @@ def build_parser():
     sp.add_argument("--title", help="PR 标题")
     sp.add_argument("--description", help="PR 描述；传 - 从 stdin 读（长 markdown 推荐，配合 <<'EOF' heredoc）")
     sp.add_argument("--description-file", help="从文件读 PR 描述（与 --description 二选一）")
+    sp.add_argument("--delete-source-branch", action="store_true",
+                    help="自动完成后删除源分支（默认不删除）")
     sp.set_defaults(func=cmd_create_pr)
 
     return parser

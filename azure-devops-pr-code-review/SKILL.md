@@ -303,8 +303,14 @@ python scripts/azdo_client.py iterations 36391
 # 创建 PR（源分支 -> 目标分支；分支名自动补 refs/heads/）
 # 描述内容按 references/pr-description-template.md 准备；创建 PR 的背景/说明边界见该文件同名章节。
 # 远端描述保留完整六段；其中 Context 背景 / Description 说明 正文默认写"人工编写中"占位，真实正文在对话里给人工参考。
+# 创建成功后默认设置为自动完成；默认不删除源分支。
 python scripts/azdo_client.py create-pr --source feature/x --target main \
   --title "feat(bpm): 新增 xxx" --description-file pr-description.remote.md
+
+# 如需自动完成后删除源分支，显式追加 --delete-source-branch
+python scripts/azdo_client.py create-pr --source feature/x --target main \
+  --title "feat(bpm): 新增 xxx" --description-file pr-description.remote.md \
+  --delete-source-branch
 
 # 或从 stdin 读远端描述；Context/Description 正文默认占位为"人工编写中"
 python scripts/azdo_client.py create-pr --source feature/x --target main \
