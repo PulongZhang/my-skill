@@ -1,22 +1,24 @@
 /**
  * Teambition F12 工时补录兜底模板。
- * 固定示例：S1867“需求”SFC，当前仅验证起始态 904。
+ * 适用范围：已验证的 S1867“需求”SFC 与起始态 904；配置值仍须按本次运行逐项核验，不能把示例当默认输入。
  * 其他 SFC 不得复用该状态，必须先提供并核验其实际工作流中 kind:start 的配置。
+ * 本模板仅用于本人补录：当前登录用户、工时所属用户和任务执行者必须是同一人。
  *
  * 每次运行都会重新查询任务和每日总工时，优先复用，仅补剩余缺口，不修改任务状态。
  * 部分失败后可重新运行，但并发写入下仍不能承诺绝对幂等，不能盲目重放旧请求。
  */
 (async () => {
-  // ===== S1867 需求配置 =====
-  const ORG_ID = '66acf1018881ceb6d5324658';
-  const USER_ID = '66c4be9751257bcd6ccc6033';
-  const PROJECT_ID = '695b09c7b842a4a0fd053603';
-  const TASKLIST_ID = '695b09c72eadc394afddb900';
-  const STAGE_ID = '695b09c72eadc394afddb970';
-  const SFC_ID = '695b09c82eadc394afddbc59';
-  const TFS_START_ID = '695b09c72eadc394afddb904';
-  const TEAMBITION_ORIGIN = 'https://tb.cet-electric.com:4753';
-  const TARGET_MS = 8 * 60 * 60 * 1000;
+  // ===== 本次运行输入（从当前页面和项目元数据核验后填写） =====
+  const ORG_ID = 'REPLACE_WITH_ORGANIZATION_ID';
+  // 本模板是本人补录模板：该 ID 同时代表当前登录用户、工时所属用户和任务执行者。
+  const SELF_USER_ID = 'REPLACE_WITH_CURRENT_USER_ID';
+  const PROJECT_ID = 'REPLACE_WITH_PROJECT_ID';
+  const TASKLIST_ID = 'REPLACE_WITH_TASKLIST_ID';
+  const STAGE_ID = 'REPLACE_WITH_STAGE_ID';
+  const SFC_ID = 'REPLACE_WITH_SFC_ID';
+  const TFS_START_ID = 'REPLACE_WITH_VERIFIED_START_STATUS_ID';
+  const TEAMBITION_ORIGIN = 'REPLACE_WITH_TEAMBITION_ORIGIN';
+  const TARGET_MS = Number('REPLACE_WITH_TARGET_MILLISECONDS');
 
   // 本模板要求每个日期仅一项；同日多任务必须另行设计显式分配方案。
   const WORK_PLANS = [
@@ -80,16 +82,30 @@
     }
   }
 
-  function isIsoDate(value) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-    const parsed = new Date(`${value}T00:00:00.000Z`);
-    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  function normalizeApiDate(value, label) {
+    if (typeof value !== 'string') throw new Error(`${label} 不是字符串`);
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})(?:T00:00:00(?:\.000)?Z)?$/);
+    if (!match) throw new Error(`${label} 不是 YYYY-MM-DD 或 UTC 零点时间戳`);
+    const date = match[1];
+    const parsed = new Date(`${date}T00:00:00.000Z`);
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+      throw new Error(`${label} 不是有效日期`);
+    }
+    return date;
+  }
+
+  function isPlanDate(value) {
+    try {
+      return normalizeApiDate(value, '计划日期') === value;
+    } catch {
+      return false;
+    }
   }
 
   function validateConfiguration() {
     assertVerifiedS1867Configuration();
     for (const [label, value] of Object.entries({
-      ORG_ID, USER_ID, PROJECT_ID, TASKLIST_ID, STAGE_ID, SFC_ID, TFS_START_ID,
+      ORG_ID, SELF_USER_ID, PROJECT_ID, TASKLIST_ID, STAGE_ID, SFC_ID, TFS_START_ID,
     })) requireId(value, label);
     requireConfigText(TEAMBITION_ORIGIN, 'TEAMBITION_ORIGIN');
     if (new URL(TEAMBITION_ORIGIN).origin !== TEAMBITION_ORIGIN) {
@@ -103,7 +119,7 @@
       assertObject(plan, `WORK_PLANS[${index}]`);
       requireConfigText(plan.date, `WORK_PLANS[${index}].date`);
       requireConfigText(plan.description, `WORK_PLANS[${index}].description`);
-      if (!isIsoDate(plan.date)) throw new Error(`WORK_PLANS[${index}].date 必须是 YYYY-MM-DD`);
+      if (!isPlanDate(plan.date)) throw new Error(`WORK_PLANS[${index}].date 必须是 YYYY-MM-DD`);
       if (dates.has(plan.date)) throw new Error(`日期 ${plan.date} 重复；每个日期只能有一项`);
       dates.add(plan.date);
       if (plan.mode === 'reuse') {
@@ -134,7 +150,7 @@
     const headers = body === undefined ? {} : { 'Content-Type': 'application/json' };
     if (isWorkTimeService) {
       headers['x-organization-id'] = ORG_ID;
-      headers['x-user-id'] = USER_ID;
+      headers['x-user-id'] = SELF_USER_ID;
     }
     const response = await fetch(`${url.pathname}${url.search}`, {
       method, headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin',
@@ -171,19 +187,19 @@
     const recordIds = new Set();
     payload.forEach((day, dayIndex) => {
       assertObject(day, `日期聚合 payload[${dayIndex}]`);
-      if (!isIsoDate(day.date)) throw new Error(`日期聚合 payload[${dayIndex}].date 不是严格 ISO 日期`);
-      if (days[day.date]) throw new Error(`日期聚合重复日期 ${day.date}`);
+      const date = normalizeApiDate(day.date, `日期聚合 payload[${dayIndex}].date`);
+      if (days[date]) throw new Error(`日期聚合重复日期 ${date}`);
       for (const field of ['workTime', 'count']) {
         if (!Number.isSafeInteger(day[field]) || day[field] < 0) {
-          throw new Error(`日期聚合 ${day.date}.${field} 不是非负安全整数`);
+          throw new Error(`日期聚合 ${date}.${field} 不是非负安全整数`);
         }
       }
-      if (!Array.isArray(day.objects)) throw new Error(`日期聚合 ${day.date}.objects 不是数组`);
-      if (day.count !== day.objects.length) throw new Error(`日期聚合 ${day.date} 的 count 与 objects 数量不符`);
+      if (!Array.isArray(day.objects)) throw new Error(`日期聚合 ${date}.objects 不是数组`);
+      if (day.count !== day.objects.length) throw new Error(`日期聚合 ${date} 的 count 与 objects 数量不符`);
       let objectWorkTime = 0;
       const objects = day.objects.map((item, itemIndex) => {
-        assertObject(item, `日期聚合 ${day.date}.objects[${itemIndex}]`);
-        requireId(item._id, `日期聚合 ${day.date}.objects[${itemIndex}]._id`);
+        assertObject(item, `日期聚合 ${date}.objects[${itemIndex}]`);
+        requireId(item._id, `日期聚合 ${date}.objects[${itemIndex}]._id`);
         if (typeof item.objectType !== 'string' || !item.objectType.trim()) throw new Error(`工时记录 ${item._id}.objectType 缺失`);
         if (recordIds.has(item._id)) throw new Error(`日期聚合重复工时记录 ID ${item._id}`);
         recordIds.add(item._id);
@@ -192,8 +208,8 @@
         objectWorkTime += item.workTime;
         return { id: item._id, objectType: item.objectType, taskId: item._objectId ?? null, time: item.workTime };
       });
-      if (objectWorkTime !== day.workTime) throw new Error(`日期聚合 ${day.date} 的 workTime 与 objects 合计不符`);
-      days[day.date] = { date: day.date, workTime: day.workTime, count: day.count, objects };
+      if (objectWorkTime !== day.workTime) throw new Error(`日期聚合 ${date} 的 workTime 与 objects 合计不符`);
+      days[date] = { date, workTime: day.workTime, count: day.count, objects };
     });
     for (const date of TARGET_DATES) {
       if (!days[date]) days[date] = { date, workTime: 0, count: 0, objects: [] };
@@ -208,7 +224,7 @@
     const result = await api('/work-time-server/api/work-time/aggregation/dates', {
       method: 'POST', expectArrayPayload: true,
       body: {
-        startDate: START_DATE, endDate: END_DATE, userIds: [USER_ID],
+        startDate: START_DATE, endDate: END_DATE, userIds: [SELF_USER_ID],
         // 每日总工时必须包含归档任务，避免漏算后重复补录。
         filter: { project: {}, task: {}, customfield: {} },
       },
@@ -233,7 +249,7 @@
         }
       }
     `;
-    const tql = `isArchived = false AND isDone = false AND executorId = "${USER_ID}"`;
+    const tql = `isArchived = false AND isDone = false AND executorId = "${SELF_USER_ID}"`;
     const nodes = [];
     const cursors = new Set();
     const taskIds = new Set();
@@ -262,7 +278,7 @@
         if (task.project?.id !== PROJECT_ID) return;
         requireApiText(task.content, `任务 ${task.id}.content`);
         requireId(task.sfcId, `任务 ${task.id}.sfcId`);
-        if (task.executorUser?.userId !== USER_ID) throw new Error(`任务 ${task.id} 执行者不匹配`);
+        if (task.executorUser?.userId !== SELF_USER_ID) throw new Error(`任务 ${task.id} 执行者不匹配`);
         for (const field of ['isDeleted', 'isArchived', 'isDone']) {
           if (typeof task[field] !== 'boolean') throw new Error(`任务 ${task.id}.${field} 缺失或不是 boolean`);
         }
@@ -278,7 +294,7 @@
       }
     }
     return nodes.filter((task) =>
-      task.project?.id === PROJECT_ID && task.executorUser?.userId === USER_ID &&
+      task.project?.id === PROJECT_ID && task.executorUser?.userId === SELF_USER_ID &&
       task.isDeleted === false && task.isArchived === false && task.isDone === false
     );
   }
@@ -324,7 +340,7 @@
   function assertGraphTask(task, title, label) {
     if (!task) throw new Error(`${label} 不在组织级未完成任务结果中`);
     if (task.content !== title) throw new Error(`${label} 标题不匹配`);
-    if (task.project?.id !== PROJECT_ID || task.executorUser?.userId !== USER_ID) throw new Error(`${label} 项目或执行者不匹配`);
+    if (task.project?.id !== PROJECT_ID || task.executorUser?.userId !== SELF_USER_ID) throw new Error(`${label} 项目或执行者不匹配`);
     if (task.sfcId !== SFC_ID) throw new Error(`${label} SFC 不匹配`);
     if (task.isDeleted !== false || task.isArchived !== false || task.isDone !== false) throw new Error(`${label} 不可复用`);
     return task;
@@ -470,7 +486,7 @@
       body: {
         content: title, _tasklistId: TASKLIST_ID, _stageId: STAGE_ID,
         _scenariofieldconfigId: SFC_ID, _taskflowstatusId: TFS_START_ID,
-        _executorId: USER_ID, priority: 0,
+        _executorId: SELF_USER_ID, priority: 0,
       },
     });
     requireId(task._id, `创建任务“${title}”响应._id`);
@@ -485,7 +501,7 @@
     if (graphTask.tasklistId !== TASKLIST_ID || graphTask.stageId !== STAGE_ID || graphTask.sfcId !== SFC_ID) {
       throw new Error(`新建任务 ${created.id} 的任务列表、阶段或 SFC 不匹配`);
     }
-    for (const [field, expected] of [['_tasklistId', TASKLIST_ID], ['_stageId', STAGE_ID], ['_executorId', USER_ID]]) {
+    for (const [field, expected] of [['_tasklistId', TASKLIST_ID], ['_stageId', STAGE_ID], ['_executorId', SELF_USER_ID]]) {
       if (bulkTask[field] !== undefined && bulkTask[field] !== expected) throw new Error(`新建任务 ${created.id}.${field} 不匹配`);
     }
   }
@@ -501,19 +517,20 @@
       if (ids.has(record._id)) throw new Error(`工时 batch 重复记录 ID ${record._id}`);
       ids.add(record._id);
       if (record.objectType !== 'task' || record._objectId !== request.taskId) throw new Error(`工时记录 ${record._id} 任务不匹配`);
-      if (!isIsoDate(record.date) || dates.has(record.date) || !desired.has(record.date)) throw new Error(`工时记录 ${record._id} 日期不匹配`);
-      dates.add(record.date);
-      if (!Number.isSafeInteger(record.workTime) || record.workTime !== desired.get(record.date).time) {
+      const date = normalizeApiDate(record.date, `工时记录 ${record._id}.date`);
+      if (dates.has(date) || !desired.has(date)) throw new Error(`工时记录 ${record._id} 日期不匹配`);
+      dates.add(date);
+      if (!Number.isSafeInteger(record.workTime) || record.workTime !== desired.get(date).time) {
         throw new Error(`工时记录 ${record._id} 时长不匹配`);
       }
-      return { id: record._id, taskId: request.taskId, date: record.date, time: record.workTime };
+      return { id: record._id, taskId: request.taskId, date, time: record.workTime };
     });
   }
 
   async function submitWorkTime(request) {
-    const result = await api(`/work-time-server/api/work-time/batch?from=task&taskId=${encodeURIComponent(request.taskId)}&_userId=${encodeURIComponent(USER_ID)}`, {
+    const result = await api(`/work-time-server/api/work-time/batch?from=task&taskId=${encodeURIComponent(request.taskId)}&_userId=${encodeURIComponent(SELF_USER_ID)}`, {
       method: 'POST', expectArrayPayload: true,
-      body: { _userId: USER_ID, _objectId: request.taskId, objectType: 'task', tagIds: [], times: request.times },
+      body: { _userId: SELF_USER_ID, _objectId: request.taskId, objectType: 'task', tagIds: [], times: request.times },
     });
     return validateBatchRecords(request, result);
   }

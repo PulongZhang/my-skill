@@ -342,10 +342,16 @@ async () => {
     return value;
   }
 
-  function isIsoDate(value) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-    const parsed = new Date(`${value}T00:00:00.000Z`);
-    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  function normalizeApiDate(value, label) {
+    if (typeof value !== "string") throw new Error(`${label} 不是字符串`);
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})(?:T00:00:00(?:\.000)?Z)?$/);
+    if (!match) throw new Error(`${label} 不是 YYYY-MM-DD 或 UTC 零点时间戳`);
+    const date = match[1];
+    const parsed = new Date(`${date}T00:00:00.000Z`);
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+      throw new Error(`${label} 不是有效日期`);
+    }
+    return date;
   }
 
   function reconcileBulkTasks(requestedIds, response) {
@@ -404,21 +410,21 @@ async () => {
   });
   const seenDates = new Set();
   const seenRecordIds = new Set();
+  const normalizedDays = [];
   for (const [index, day] of aggregation.payload.entries()) {
     if (!day || typeof day !== "object" || Array.isArray(day)) throw new Error(`日期聚合 payload[${index}] 不是对象`);
-    if (!isIsoDate(day.date) || seenDates.has(day.date)) {
-      throw new Error(`日期聚合 payload[${index}].date 缺失、非法或重复`);
-    }
-    seenDates.add(day.date);
+    const date = normalizeApiDate(day.date, `日期聚合 payload[${index}].date`);
+    if (seenDates.has(date)) throw new Error(`日期聚合日期重复 ${date}`);
+    seenDates.add(date);
     for (const field of ["workTime", "count"]) {
-      if (!Number.isSafeInteger(day[field]) || day[field] < 0) throw new Error(`${day.date}.${field} 非法`);
+      if (!Number.isSafeInteger(day[field]) || day[field] < 0) throw new Error(`${date}.${field} 非法`);
     }
-    if (!Array.isArray(day.objects)) throw new Error(`${day.date}.objects 不是数组`);
-    if (day.count !== day.objects.length) throw new Error(`${day.date}.count 与 objects 数量不符`);
+    if (!Array.isArray(day.objects)) throw new Error(`${date}.objects 不是数组`);
+    if (day.count !== day.objects.length) throw new Error(`${date}.count 与 objects 数量不符`);
     let objectWorkTime = 0;
     for (const [objectIndex, item] of day.objects.entries()) {
-      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`${day.date}.objects[${objectIndex}] 不是对象`);
-      requireTeambitionId(item._id, `${day.date}.objects[${objectIndex}]._id`);
+      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`${date}.objects[${objectIndex}] 不是对象`);
+      requireTeambitionId(item._id, `${date}.objects[${objectIndex}]._id`);
       if (seenRecordIds.has(item._id)) throw new Error(`工时记录 ID 重复 ${item._id}`);
       seenRecordIds.add(item._id);
       if (typeof item.objectType !== "string" || !item.objectType.trim()) throw new Error(`工时记录 ${item._id} 缺少 objectType`);
@@ -426,9 +432,10 @@ async () => {
       if (item.objectType === "task") requireTeambitionId(item._objectId, `工时记录 ${item._id}._objectId`);
       objectWorkTime += item.workTime;
     }
-    if (objectWorkTime !== day.workTime) throw new Error(`${day.date}.workTime 与 objects 合计不符`);
+    if (objectWorkTime !== day.workTime) throw new Error(`${date}.workTime 与 objects 合计不符`);
+    normalizedDays.push({ ...day, date });
   }
-  const taskIds = [...new Set(aggregation.payload.flatMap(day => day.objects)
+  const taskIds = [...new Set(normalizedDays.flatMap(day => day.objects)
     .filter(item => item.objectType === "task").map(item => item._objectId))];
   const bulk = taskIds.length === 0
     ? { ok: true, payload: [] }
@@ -450,7 +457,9 @@ async () => {
 }
 ```
 
-分类顺序以删除、归档优先，再区分已完成和未完成；bulk 缺失 ID 归入未知。
+日期聚合在真实环境中曾返回 `YYYY-MM-DD`，也曾返回 `YYYY-MM-DDT00:00:00.000Z`。查询代码只接受这两类可证明等价的格式，并统一归一化为 `YYYY-MM-DD`；不要对任意字符串直接 `slice(0, 10)`。
+
+分类顺序为未知/缺失、已删除、已归档、已完成、未完成，命中前一类后不再进入后续类别。
 
 ## 创建任务
 
@@ -528,4 +537,4 @@ PUT /api/tasks/{id}/taskflowstatus
 
 - 批量操作发生部分失败时，保留逐项结果并重新查询现状，只重试已确认失败且当前状态仍需处理的项；不要整体盲目重跑。
 - 创建任务和登记工时接口没有幂等键。写前查询、稳定任务 ID/标题、按日期缺口计算和写后对账只能降低重复风险，不能保证并发下绝对无重复。
-- 删除工时记录和删除任务均不可恢复。只有在用户明确授权且再次确认具体记录 ID / 任务 ID 后才能执行。
+- 删除工时记录和删除任务均不可恢复。当前资料尚未确认任务删除响应，以及删除后用于证明业务状态的完整查询契约；在通过只读观察补齐请求、响应和独立验证方法之前，不要根据 endpoint 猜测执行。契约确认后仍须先展示具体记录 ID / 任务 ID，并取得单独授权。
