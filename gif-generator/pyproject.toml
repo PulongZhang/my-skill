@@ -1,0 +1,11 @@
+[project]
+name = "gif-generator"
+version = "0.1.0"
+description = "Utilities for generating GIFs from image frames and sprite sheets"
+requires-python = ">=3.8"
+dependencies = [
+    "pillow>=10,<12",
+]
+
+[tool.uv]
+package = false

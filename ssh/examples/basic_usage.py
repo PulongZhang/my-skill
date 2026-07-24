@@ -6,10 +6,10 @@ SSH Skill 基本用法（可运行）
 - 运行前请先把示例配置中的占位符替换为你的真实信息（不要提交到仓库）。
 
 用法：
-  python basic_usage.py [config_json] [command]
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/examples/basic_usage.py [config_json] [command]
 
 示例：
-  python basic_usage.py ./config_single_key.json "whoami && hostname"
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/examples/basic_usage.py ./config_single_key.json "whoami && hostname"
 """
 
 from __future__ import annotations

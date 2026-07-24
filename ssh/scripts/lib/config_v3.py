@@ -20,7 +20,7 @@ from pathlib import Path
 try:
     import paramiko
 except ImportError:
-    raise ImportError("需要安装 paramiko 库: pip install paramiko")
+    raise ImportError("需要安装 paramiko 库: 请在 Skill 根目录执行 uv sync")
 
 
 class SSHConfigLoaderV3:

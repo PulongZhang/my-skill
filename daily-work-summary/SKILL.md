@@ -18,10 +18,10 @@ When the user asks to generate a daily summary from Git commits, use the bundled
 Typical commands:
 
 ```bash
-python scripts/daily_git_commits.py
-python scripts/daily_git_commits.py --date 2026-04-13
-python scripts/daily_git_commits.py --since 2026-04-01 --until 2026-04-13
-python scripts/daily_git_commits.py --author zhangpulong --roots D:\WorkSpace D:\CETWorkSpace
+uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_git_commits.py
+uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_git_commits.py --date 2026-04-13
+uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_git_commits.py --since 2026-04-01 --until 2026-04-13
+uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_git_commits.py --author zhangpulong --roots D:\WorkSpace D:\CETWorkSpace
 ```
 
 Use script output as raw work material only. Do not paste the generated Git report as the final answer, and do not state or imply in the final summary that the content was generated from Git commits or extracted from commit records. Convert commit subjects, commit bodies, changed files, repositories, and diff stats into the required objective Chinese daily summary.
@@ -71,7 +71,7 @@ Rules:
 
 ## Diligent Time
 
-When the user asks to include diligent time, or when work content indicates overtime content should be recorded, run `python scripts/calculate_diligent_time.py` to get the end-time line.
+When the user asks to include diligent time, or when work content indicates overtime content should be recorded, run `uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/calculate_diligent_time.py` to get the end-time line.
 
 Rules:
 

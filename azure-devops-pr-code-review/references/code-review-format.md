@@ -42,7 +42,7 @@
 发评论命令：
 
 ```bash
-python scripts/azdo_client.py add-comment <PR> \
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py add-comment <PR> \
   --file "<path>" --line <N> --change-tracking-id <ID> --content "..."
 ```
 

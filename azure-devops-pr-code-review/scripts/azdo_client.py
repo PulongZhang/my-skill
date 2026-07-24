@@ -8,7 +8,7 @@
 ~/.config/azdo/config.json（Windows: %USERPROFILE%\\.config\\azdo\\config.json）
 后填入 pat 字段即可。
 
-依赖：pip install requests
+依赖：使用 `uv run` 或先执行 `uv sync` 安装 requests。
 """
 import argparse
 import base64
@@ -20,7 +20,7 @@ from urllib.parse import quote
 try:
     import requests
 except ImportError:
-    sys.exit("需要 requests 库：pip install requests")
+    sys.exit("需要 requests 库：请在 Skill 根目录执行 uv sync，或用 uv run 启动此脚本")
 
 # on-prem 常用自签名证书，默认不校验；如需校验改 verify=True
 import urllib3

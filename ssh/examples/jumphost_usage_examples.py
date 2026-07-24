@@ -10,15 +10,15 @@ def main() -> None:
         """
 单跳板机（推荐：使用 config_jump_single_key.json）：
 
-  python ../scripts/ssh_execute.py ./config_jump_single_key.json "whoami && hostname"
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py ./config_jump_single_key.json "whoami && hostname"
 
 双跳板机（推荐：使用 config_jump_double.json）：
 
-  python ../scripts/ssh_execute.py ./config_jump_double.json "whoami && hostname"
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py ./config_jump_double.json "whoami && hostname"
 
 简化写法（jump_hosts 只写字符串主机名）：
 
-  python ../scripts/ssh_execute.py ./config_jump_simple.json "uptime"
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py ./config_jump_simple.json "uptime"
 
 注意：
 - 示例配置全部是占位符/保留网段 IP，请按你的真实环境替换后使用。

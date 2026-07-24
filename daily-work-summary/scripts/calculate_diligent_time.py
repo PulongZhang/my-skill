@@ -12,8 +12,8 @@
 - 示例：当前时间 20:14 → 从 17:45 到 20:14 共 149 分钟 → 向上取整 5 个块 → 结束时间 20:15
 
 用法:
-    python calculate_diligent_time.py
-    python calculate_diligent_time.py --time 20:14
+    uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/calculate_diligent_time.py
+    uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/calculate_diligent_time.py --time 20:14
 """
 
 import sys

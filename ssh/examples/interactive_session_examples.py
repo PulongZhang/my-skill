@@ -19,9 +19,9 @@ def main() -> None:
         """
 示例：把 apt 安装变为非交互式（需要你按真实系统调整）：
 
-  python ../scripts/ssh_execute.py ./config_single_key.json "sudo -n true && echo ok || echo 'sudo 需要免密或交互'"
-  python ../scripts/ssh_execute.py ./config_single_key.json "sudo -n DEBIAN_FRONTEND=noninteractive apt-get update -y"
-  python ../scripts/ssh_execute.py ./config_single_key.json "sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y nginx"
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py ./config_single_key.json "sudo -n true && echo ok || echo 'sudo 需要免密或交互'"
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py ./config_single_key.json "sudo -n DEBIAN_FRONTEND=noninteractive apt-get update -y"
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py ./config_single_key.json "sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y nginx"
 """
     )
 

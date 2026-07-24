@@ -6,20 +6,20 @@ SSH批量操作CLI工具 v3.0
 从 SSH config 读取服务器列表，支持按环境/别名过滤
 
 用法：
-    python ssh_cluster.py <command> [--parallel] [--hosts HOSTS] [--environment ENV]
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_cluster.py <command> --confirm [--parallel] [--hosts HOSTS] [--environment ENV]
 
 示例：
     # 对所有服务器执行命令
-    python ssh_cluster.py "uptime" --parallel
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_cluster.py "uptime" --parallel --confirm
 
     # 对指定别名列表执行
-    python ssh_cluster.py "df -h" --hosts "DEV-002,DEV-003" --parallel
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_cluster.py "df -h" --hosts "DEV-002,DEV-003" --parallel --confirm
 
     # 按环境过滤
-    python ssh_cluster.py "uptime" --environment production --parallel
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_cluster.py "uptime" --environment production --parallel --confirm
 
     # 健康检查
-    python ssh_cluster.py "systemctl status nginx" --parallel --health-check
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_cluster.py "systemctl status nginx" --parallel --confirm --health-check
 """
 
 import sys

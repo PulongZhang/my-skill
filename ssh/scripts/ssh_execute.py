@@ -7,12 +7,12 @@ SSH命令执行CLI工具 v3.0
 自动检测守护进程：有则走长连接，无则走直连。
 
 用法：
-    python ssh_execute.py <alias> <command> [--timeout TIMEOUT]
-    python ssh_execute.py <alias> <command> --no-daemon
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py <alias> <command> --confirm [--timeout TIMEOUT]
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py <alias> <command> --no-daemon --confirm
 
 示例：
-    python ssh_execute.py prod-web-01 "whoami && hostname"
-    python ssh_execute.py DEV-002 "df -h" --timeout 60
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py prod-web-01 "whoami && hostname" --confirm
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py DEV-002 "df -h" --timeout 60 --confirm
 """
 
 import sys

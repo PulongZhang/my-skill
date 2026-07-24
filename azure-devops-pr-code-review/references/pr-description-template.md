@@ -81,7 +81,7 @@ body: {"description": "<markdown 内容>"}
 
 > **更新流程：先 GET 现状，合并后整体写回，禁止直接覆盖。** `PATCH description` 是整体覆盖整个描述字段。更新已有 PR 描述时必须：
 
-1. **取现状**：`python scripts/azdo_client.py pr-detail <prId> --description` 获取当前完整 description 原文。
+1. **取现状**：`uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py pr-detail <prId> --description` 获取当前完整 description 原文。
 2. **合并**：在现有 description 基础上只改动需要更新的段落，**保留其余段落不变**；不要只传要改的部分，否则未提及的段落会被覆盖丢失。
 3. **整体写回**：用合并后的完整 description 执行 `update-pr --description -` / `--description-file`。
 
@@ -92,15 +92,15 @@ body: {"description": "<markdown 内容>"}
 ```bash
 # --repo 是顶层选项，必须放在子命令 update-pr 之前；非默认仓库时才需指定
 # 从 stdin 读描述（推荐，配合 <<'EOF' heredoc，避免 markdown 反引号/$ 被转义）
-python scripts/azdo_client.py --repo <repo> update-pr <prId> --description - <<'EOF'
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py --repo <repo> update-pr <prId> --description - <<'EOF'
 <markdown 描述内容>
 EOF
 
 # 或从文件读（适合长描述）
-python scripts/azdo_client.py update-pr <prId> --description-file desc.md
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py update-pr <prId> --description-file desc.md
 
 # 也可同时改标题
-python scripts/azdo_client.py update-pr <prId> --title "feat(bpm): 新标题" --description-file desc.md
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py update-pr <prId> --title "feat(bpm): 新标题" --description-file desc.md
 ```
 
 > 长描述含 markdown 反引号 / `$` / 换行，优先用 `--description -`（stdin + `<<'EOF'`）或 `--description-file`，**不要**塞进 `--description "..."` 字面值（同 `add-comment` 的长评论处理）。

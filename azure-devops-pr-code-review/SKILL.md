@@ -275,54 +275,54 @@ GET .../blobs/{objectId}?api-version=5.0
 
 ```bash
 # 列出某 PR 评论线程
-python scripts/azdo_client.py pr-threads 36391
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py pr-threads 36391
 
 # 行内评论
-python scripts/azdo_client.py add-comment 36391 --file "/path/File.java" --line 31 --change-tracking-id 3 --content "【必改】..."
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py add-comment 36391 --file "/path/File.java" --line 31 --change-tracking-id 3 --content "【必改】..."
 
 # 长内容必改行内评论（含 markdown 反引号/$/换行）：优先 stdin（--content -）或 --content-file，
 # 避免命令行 --content 被 shell 转义破坏；heredoc 用带引号的 'EOF' 禁用一切展开
-python scripts/azdo_client.py add-comment 36391 --file "/path/File.java" --line 31 --change-tracking-id 3 --content - <<'EOF'
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py add-comment 36391 --file "/path/File.java" --line 31 --change-tracking-id 3 --content - <<'EOF'
 【必改】这里会导致空语言覆盖默认值
 影响：`LanguageUtil.getLanguage()` 返回空字符串时，下游会把默认语言写成空值，导致 i18n 文案缺失。
 建议：写入前先 trim 并过滤空字符串，空值继续使用默认语言。
 EOF
 
 # 或从文件读（适合先用编辑器/工具写好长必改行内评论再发）
-python scripts/azdo_client.py add-comment 36391 --file "/path/File.java" --line 31 --change-tracking-id 3 --content-file must-fix-comment.md
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py add-comment 36391 --file "/path/File.java" --line 31 --change-tracking-id 3 --content-file must-fix-comment.md
 
 # 删除评论
-python scripts/azdo_client.py del-comment 36391 205707 1
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py del-comment 36391 205707 1
 
 # 按 commit 取文件内容
-python scripts/azdo_client.py file-content --path "/path/File.java" --commit 7e78dfe4
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py file-content --path "/path/File.java" --commit 7e78dfe4
 
 # 列出 PR 迭代
-python scripts/azdo_client.py iterations 36391
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py iterations 36391
 
 # 创建 PR（源分支 -> 目标分支；分支名自动补 refs/heads/）
 # 描述内容按 references/pr-description-template.md 准备；创建 PR 的背景/说明边界见该文件同名章节。
 # 远端描述保留完整六段；其中 Context 背景 / Description 说明 正文默认写"人工编写中"占位，真实正文在对话里给人工参考。
 # 创建成功后默认设置为自动完成；默认不删除源分支。
-python scripts/azdo_client.py create-pr --source feature/x --target main \
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py create-pr --source feature/x --target main \
   --title "feat(bpm): 新增 xxx" --description-file pr-description.remote.md
 
 # 如需自动完成后删除源分支，显式追加 --delete-source-branch
-python scripts/azdo_client.py create-pr --source feature/x --target main \
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py create-pr --source feature/x --target main \
   --title "feat(bpm): 新增 xxx" --description-file pr-description.remote.md \
   --delete-source-branch
 
 # 或从 stdin 读远端描述；Context/Description 正文默认占位为"人工编写中"
-python scripts/azdo_client.py create-pr --source feature/x --target main \
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py create-pr --source feature/x --target main \
   --title "feat(bpm): 新增 xxx" --description - <<'EOF'
 <按模板填写的远端描述；Context 背景 / Description 说明 正文写"人工编写中"占位>
 EOF
 
 # 代码评审：拉 PR 数据（详情 / 提交 / 文件变更含 changeTrackingId / 审阅者）
-python scripts/azdo_client.py pr-detail 36391
-python scripts/azdo_client.py pr-commits 36391
-python scripts/azdo_client.py pr-changes 36391          # changeTrackingId 供行内评论用
-python scripts/azdo_client.py reviewers 36391
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py pr-detail 36391
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py pr-commits 36391
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py pr-changes 36391          # changeTrackingId 供行内评论用
+uv run --project ~/.claude/skills/azure-devops-pr-code-review python ~/.claude/skills/azure-devops-pr-code-review/scripts/azdo_client.py reviewers 36391
 ```
 
 > **长必改行内评论勿走 `--content` 字面值**：含反引号（shell 命令替换）、`$`（变量展开）、单引号（字符串断裂）或超长内容，经命令行 `--content "..."` 传参会被 shell 破坏或触发 ARG_MAX。统一用 `--content -`（stdin + `<<'EOF'`）或 `--content-file`；短评论仍可用 `--content "..."`。

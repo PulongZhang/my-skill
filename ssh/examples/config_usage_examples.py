@@ -12,13 +12,13 @@ def main() -> None:
 最常见用法（推荐：走 CLI 入口，稳定且不依赖 Python 导入路径）：
 
   # 单机（密钥认证）
-  python ../scripts/ssh_execute.py ./config_single_key.json "whoami && hostname"
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py ./config_single_key.json "whoami && hostname"
 
   # 单跳板机
-  python ../scripts/ssh_execute.py ./config_jump_single_key.json "uptime"
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py ./config_jump_single_key.json "uptime"
 
   # 多服务器（选择某个 server）
-  python ../scripts/ssh_execute.py ./config_multi_servers.json "hostname" --server dev
+  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py ./config_multi_servers.json "hostname" --server dev
 
 配置文件建议字段：
 - summary（中文摘要，推荐必填）：一眼看懂用途/环境/责任人

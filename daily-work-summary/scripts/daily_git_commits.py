@@ -6,11 +6,11 @@
 扫描指定目录下所有 Git 仓库，提取指定用户的提交记录，按日期分组输出。
 
 用法:
-    python daily_git_commits.py                          # 默认今天
-    python daily_git_commits.py --date 2026-04-13        # 指定日期
-    python daily_git_commits.py --since 2026-04-01       # 指定起始日期到今天
-    python daily_git_commits.py --since 2026-04-01 --until 2026-04-13  # 指定日期范围
-    python daily_git_commits.py --output report.md       # 输出到文件
+    uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_git_commits.py                          # 默认今天
+    uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_git_commits.py --date 2026-04-13        # 指定日期
+    uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_git_commits.py --since 2026-04-01       # 指定起始日期到今天
+    uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_git_commits.py --since 2026-04-01 --until 2026-04-13  # 指定日期范围
+    uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_git_commits.py --output report.md       # 输出到文件
 """
 
 import subprocess

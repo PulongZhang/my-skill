@@ -56,7 +56,7 @@ Fixes:
 For a horizontal green-screen sprite sheet, use:
 
 ```bash
-python scripts/sprite_sheet_to_gif.py \
+uv run --project ~/.claude/skills/gif-generator python ~/.claude/skills/gif-generator/scripts/sprite_sheet_to_gif.py \
   --input path/to/sprite-sheet.png \
   --out path/to/final.gif \
   --preview path/to/preview.png \
@@ -71,7 +71,7 @@ python scripts/sprite_sheet_to_gif.py \
 For ordinary frame files, use `scripts/images_to_gif.py` only after the frames have already passed through the green-screen cleanup step:
 
 ```bash
-python scripts/images_to_gif.py \
+uv run --project ~/.claude/skills/gif-generator python ~/.claude/skills/gif-generator/scripts/images_to_gif.py \
   --input-dir path/to/frames \
   --glob "*.png" \
   --out path/to/final.gif \

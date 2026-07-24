@@ -8,23 +8,23 @@ SSH 服务器间文件传输工具 v1.0
 2. 流式转发模式（Stream）：本地同时连接两台服务器，流式中转数据
 
 用法：
-    python ssh_server_transfer.py <源别名> <源路径> <目标别名> <目标路径> [options]
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_server_transfer.py <源别名> <源路径> <目标别名> <目标路径> [options]
 
 示例：
     # 自动模式（推荐）
-    python ssh_server_transfer.py prod-web-01 /var/log/app.log backup-server /backup/
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_server_transfer.py prod-web-01 /var/log/app.log backup-server /backup/
 
     # 强制直连模式（大文件推荐）
-    python ssh_server_transfer.py prod-web-01 /data/large.tar.gz backup-server /backup/ --mode direct
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_server_transfer.py prod-web-01 /data/large.tar.gz backup-server /backup/ --mode direct
 
     # 强制流式转发（小文件或网络不通时）
-    python ssh_server_transfer.py prod-web-01 /etc/config.conf backup-server /backup/ --mode stream
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_server_transfer.py prod-web-01 /etc/config.conf backup-server /backup/ --mode stream
 
     # 混合模式（先尝试直连，失败后自动降级到流式）
-    python ssh_server_transfer.py prod-web-01 /data/ backup-server /backup/ --mode hybrid
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_server_transfer.py prod-web-01 /data/ backup-server /backup/ --mode hybrid
 
     # 使用 rsync（仅直连模式支持）
-    python ssh_server_transfer.py prod-web-01 /data/ backup-server /backup/data/ --use-rsync
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_server_transfer.py prod-web-01 /data/ backup-server /backup/data/ --use-rsync
 """
 
 import sys
