@@ -35,13 +35,12 @@ GIT_AUTHOR = "zhangpulong"
 
 # 要扫描的根目录列表，脚本会递归查找其中所有 Git 仓库
 SCAN_ROOTS = [
-    r"D:\WorkSpace",
     r"D:\CETWorkSpace",
     # 如需添加更多目录，在此处追加即可
 ]
 
 # 最大递归深度（避免扫描过深）
-MAX_DEPTH = 4
+MAX_DEPTH = 8
 
 # ==================== 配置区域结束 ====================
 
