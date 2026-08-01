@@ -12,7 +12,8 @@ my-skill/
 │   ├── uv.lock         # 仅 Python Skill
 │   ├── scripts/        # 可选
 │   ├── references/     # 可选
-│   └── assets/         # 可选
+│   ├── assets/         # 可选
+│   └── tests/          # 可选
 └── README.md
 ```
 
@@ -52,6 +53,7 @@ description: Use when handling the example workflow.
 - `daily-work-summary`
 - `gif-generator`
 - `meeting-minutes-docx`
+- `running-song-maker`
 - `ssh`
 
 ### 日常命令
