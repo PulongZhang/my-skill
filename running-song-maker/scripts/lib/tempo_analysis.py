@@ -285,7 +285,7 @@ def _snap_beats_to_onsets(
     onset_envelope: np.ndarray,
     beat_frames: np.ndarray,
     period_frames: int,
-    snap_fraction: float = 0.15,
+    snap_fraction: float = 0.05,
 ) -> np.ndarray:
     """Pull each grid beat to the nearest onset peak inside a snap window.
 
@@ -380,10 +380,15 @@ def analyze_tempo(
     source_bpm, _ = _resolve_source_bpm(candidates)
 
     period_seconds = 60.0 / source_bpm
-    integer_period = max(1, int(round(period_seconds * ANALYSIS_RATE / HOP)))
+    expected_period = period_seconds * ANALYSIS_RATE / HOP
+    integer_period = max(1, int(round(expected_period)))
     integer_phase, _ = _grid_phase_search(onset_envelope, integer_period)
     period_frames, phase = _refine_grid(
-        onset_envelope, float(integer_period), float(integer_phase)
+        onset_envelope,
+        expected_period,
+        float(integer_phase),
+        period_radius=expected_period * 0.015,
+        period_step=0.002,
     )
     hit = _hit_ratio(onset_envelope, int(round(period_frames)), int(round(phase)))
 
