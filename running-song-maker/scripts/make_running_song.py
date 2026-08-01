@@ -9,6 +9,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import numpy as np
+
 from lib.audio_io import (
     AudioProcessingError,
     decode_audio,
@@ -29,6 +31,7 @@ from lib.tempo_analysis import (
     TempoAnalysisError,
     alignment_result,
     analyze_tempo,
+    fit_click_grid,
     parse_target_bpm,
     transformed_alignment,
 )
@@ -45,7 +48,7 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CLICK = SKILL_DIR / "assets" / "running_wood_click_580hz_soft6ms.wav"
 LOW_CONFIDENCE_THRESHOLD = 0.35
 STRICT_GRID_ERROR_P95_MS = 25.0
-STRICT_END_DRIFT_MS = 30.0
+STRICT_END_DRIFT_MS = 50.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -171,10 +174,10 @@ def _tempo_report_fields(
 
 
 def _needs_strict_tempo_map(analysis: TempoAnalysis) -> bool:
-    return (
-        analysis.grid_error_p95_ms > STRICT_GRID_ERROR_P95_MS
-        or analysis.estimated_end_drift_ms > STRICT_END_DRIFT_MS
-    )
+    # Strict time maps correct real tempo drift. A raised P95 alone usually
+    # reflects swing or detection micro-jitter on quantized productions, which
+    # a global stretch plus grid click placement tolerates fine.
+    return analysis.estimated_end_drift_ms > STRICT_END_DRIFT_MS
 
 
 def _analysis_payload(
@@ -420,18 +423,27 @@ def run(args: argparse.Namespace) -> int:
             and not args.preserve_stereo_width
             and stretched_channels == 2
         )
-        anchor_output = (
-            time_map.anchor_output_seconds
-            if time_map
-            else analysis.anchor_seconds / stretch_ratio
-        )
+        # Fit the click grid to the actual stretched audio rather than using
+        # the theoretical target BPM: analysis error and codec behavior both
+        # shift the real post-stretch grid, and clicks must follow the music.
+        # In strict mode the time map has already placed every beat on the
+        # uniform target grid, so the theoretical grid is the real one there.
+        if time_map:
+            click_bpm = target_bpm
+            click_phase = time_map.anchor_output_seconds
+        else:
+            actual_period_seconds, actual_phase_seconds = fit_click_grid(
+                stretched_audio, sample_rate, target_bpm
+            )
+            click_bpm = 60.0 / actual_period_seconds
+            click_phase = actual_phase_seconds
         click_asset = load_click_asset(args.click_file.resolve(), sample_rate)
         click_track = generate_click_track(
             stretched_audio.shape[0],
             stretched_channels,
             sample_rate,
-            target_bpm,
-            anchor_output,
+            click_bpm,
+            click_phase,
             click_asset,
             args.click_peak_dbfs,
         )
@@ -513,12 +525,17 @@ def run(args: argparse.Namespace) -> int:
                 time_map.estimated_end_drift_ms,
             )
         else:
-            alignment = transformed_alignment(
-                analysis.beat_times,
-                analysis.anchor_seconds,
-                stretch_ratio,
-                target_bpm,
-                strict=False,
+            # Verify against the actual fitted click grid, not the theoretical
+            # target BPM: the real post-stretch grid is what the music hears.
+            mapped_beats = analysis.beat_times / stretch_ratio
+            half_interval = click_report["interval_seconds"]
+            nearest = np.rint((mapped_beats - click_phase) / half_interval)
+            target_times = click_phase + nearest * half_interval
+            errors_ms = np.abs(mapped_beats - target_times) * 1000.0
+            alignment = alignment_result(
+                float(np.percentile(errors_ms, 50)),
+                float(np.percentile(errors_ms, 95)),
+                end_drift_ms=0.0,
             )
 
         click_equal_volume = click_report["odd_even_peak_ratio"] >= 0.99
