@@ -195,6 +195,22 @@ click 峰值 - 音乐平均 RMS：16 dB
 
 输入歌曲路径存在且用户已提供时，再展示该歌曲的实际处理命令；若歌曲路径尚不存在，应明确说明当前只是处理计划、尚未执行音频分析或生成成品，不要虚构分析结果。
 
+## 输出命名
+
+不指定 `--output` 时，成品默认命名为：
+
+```text
+<原歌曲名>(<目标bpm>bpm).wav
+```
+
+示例：
+
+- `Blinding Lights.m4a` → `Blinding Lights(90bpm).wav`
+- `Die For You.flac` → `Die For You(90bpm).wav`
+- `Starboy.mp3` → `Starboy(95bpm).wav`
+
+生成文件与输入同目录。`--output` 明确指定时使用指定路径。回复中报告成品路径时使用实际文件名。
+
 ## 输出与回复
 
 完成后向用户报告：

@@ -58,7 +58,13 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--input", required=True, type=Path, help="Source song path")
-    parser.add_argument("--output", type=Path, help="Output WAV/FLAC/MP3/M4A path")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help=(
+            "Output path; defaults to <原歌曲名>(<bpm>bpm).wav next to the input"
+        ),
+    )
     parser.add_argument(
         "--target-bpm",
         default="auto",
@@ -254,7 +260,7 @@ def _validate_paths(args: argparse.Namespace) -> tuple[Path, Path | None, Path |
     if args.analyze_only:
         return input_path, None, None
     if args.output is None:
-        raise AudioProcessingError("--output is required unless --analyze-only is used")
+        return input_path, None, None
 
     output_path = args.output.resolve()
     if not output_path.suffix:
@@ -311,6 +317,16 @@ def run(args: argparse.Namespace) -> int:
         source_duration = duration_seconds(source_audio, sample_rate)
         analysis = analyze_tempo(source_audio, sample_rate, args.first_beat)
         target_bpm = parse_target_bpm(args.target_bpm, analysis.source_bpm)
+        if output_path is None:
+            output_path = input_path.with_name(
+                f"{input_path.stem}({target_bpm:.0f}bpm).wav"
+            )
+            report_path = output_path.with_suffix(".wav.report.json")
+            for path in (output_path, report_path):
+                if path.exists() and not args.overwrite:
+                    raise AudioProcessingError(
+                        f"Output already exists: {path}. Use --overwrite to replace it."
+                    )
         stretch_ratio = target_bpm / analysis.source_bpm
         stretch_percent = (stretch_ratio - 1.0) * 100.0
         tempo_fields = _tempo_report_fields(
