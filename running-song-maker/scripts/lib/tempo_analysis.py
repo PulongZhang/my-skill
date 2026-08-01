@@ -135,24 +135,78 @@ def _scaled_variants(bpm: float, low: float = 35.0, high: float = 300.0) -> list
 
 
 def _resolve_source_bpm(
+    onset_envelope: np.ndarray,
     candidates: list[tuple[float, float]],
     preferred: tuple[float, ...] = (90.0, 95.0),
 ) -> tuple[float, float]:
-    """Pick the BPM and target whose powers-of-two variants are closest.
+    """Pick the BPM and target whose grid actually carries the music.
 
-    Half-time feel songs such as Die For You (67 BPM) can be read as
-    134 BPM, so each autocorrelation candidate is expanded to its powers of
-    two and the variant closest to a running target wins.
+    Half-time feel songs can be read at several powers of two, so each
+    autocorrelation candidate is expanded to its variants. But numeric
+    proximity to a running target alone can pick a weak alias (for example
+    Blinding Lights reads 97.5 from a weak 48.8 autocorrelation peak while
+    its real 85.5 BPM quarter-note grid carries far more onset energy).
+    Combine normalized grid energy with target compatibility so the winning
+    variant must both align with the music and stretch reasonably.
     """
-    best_bpm: float | None = None
-    best_distance = float("inf")
+    variants: list[tuple[float, float]] = []
     for candidate, _ in candidates:
         for variant in _scaled_variants(candidate):
-            distance = min(abs(np.log(preferred_value / variant)) for preferred_value in preferred)
-            if distance < best_distance:
-                best_bpm, best_distance = variant, distance
-    if best_bpm is None:
+            period_frames = 60.0 / variant * ANALYSIS_RATE / HOP
+            if period_frames <= 1.0:
+                continue
+            energy = max(
+                _grid_energy(onset_envelope, period_frames, phase)
+                for phase in np.arange(0.0, period_frames, 0.5)
+            )
+            distance = min(
+                abs(np.log(preferred_value / variant)) for preferred_value in preferred
+            )
+            variants.append((variant, energy, distance))
+    if not variants:
         raise TempoAnalysisError("Could not resolve a source BPM from candidates")
+
+    # Grid energy is extremely sensitive to BPM precision (a 0.7% error can
+    # halve it), so refine the top coarse candidates to a fractional period
+    # before scoring them. Refining every variant is too slow; the top three
+    # carry all realistic interpretations.
+    # Refine the top candidates by combined score (energy and target
+    # compatibility), not raw energy: a high-energy alias such as a weak
+    # autocorrelation peak at 4x the real BPM has zero compatibility and must
+    # not consume the refinement budget.
+    max_coarse_energy = max(energy for _, energy, _ in variants)
+    variants.sort(
+        key=lambda item: (
+            (item[1] / max_coarse_energy if max_coarse_energy > 0 else 0.0)
+            * max(0.0, 1.0 - item[2] / 0.12)
+        ),
+        reverse=True,
+    )
+    refined: list[tuple[float, float, float]] = []
+    for variant, _, _ in variants[:3]:
+        period_frames = 60.0 / variant * ANALYSIS_RATE / HOP
+        refined_period, refined_phase = _refine_grid(
+            onset_envelope,
+            period_frames,
+            0.0,
+            period_radius=period_frames * 0.015,
+            period_step=0.002,
+        )
+        energy = _grid_energy(onset_envelope, refined_period, refined_phase)
+        refined_bpm = 60.0 / (refined_period * HOP / ANALYSIS_RATE)
+        refined_distance = min(
+            abs(np.log(preferred_value / refined_bpm)) for preferred_value in preferred
+        )
+        refined.append((refined_bpm, energy, refined_distance))
+
+    max_energy = max(energy for _, energy, _ in refined)
+    best_bpm, _, _ = max(
+        refined,
+        key=lambda item: (
+            (item[1] / max_energy if max_energy > 0 else 0.0)
+            * max(0.0, 1.0 - item[2] / 0.12)
+        ),
+    )
     return best_bpm, choose_target_bpm(best_bpm, preferred)
 
 
@@ -377,7 +431,7 @@ def analyze_tempo(
 ) -> TempoAnalysis:
     onset_envelope = _onset_envelope(audio, sample_rate)
     candidates = _tempo_candidates(onset_envelope)
-    source_bpm, _ = _resolve_source_bpm(candidates)
+    source_bpm, _ = _resolve_source_bpm(onset_envelope, candidates)
 
     period_seconds = 60.0 / source_bpm
     expected_period = period_seconds * ANALYSIS_RATE / HOP
