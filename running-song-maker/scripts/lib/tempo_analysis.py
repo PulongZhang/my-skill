@@ -430,9 +430,10 @@ def analyze_tempo(
     if not np.isfinite(anchor) or anchor < 0 or anchor >= audio.shape[0] / sample_rate:
         raise TempoAnalysisError("First-beat anchor is outside the audio duration")
 
+    refined_bpm = 60.0 / (period_frames * HOP / ANALYSIS_RATE)
     return TempoAnalysis(
         raw_bpm=candidates[0][0],
-        source_bpm=source_bpm,
+        source_bpm=refined_bpm,
         beat_times=beat_times,
         anchor_seconds=anchor,
         grid_period_seconds=period_frames * HOP / ANALYSIS_RATE,
