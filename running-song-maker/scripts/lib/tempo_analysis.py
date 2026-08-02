@@ -16,6 +16,7 @@ class TempoAnalysis:
     raw_bpm: float
     source_bpm: float
     beat_times: np.ndarray
+    beat_ordinals: np.ndarray
     anchor_seconds: float
     grid_period_seconds: float
     grid_origin_seconds: float
@@ -23,6 +24,16 @@ class TempoAnalysis:
     grid_error_p95_ms: float
     estimated_end_drift_ms: float
     confidence: float
+    observed_beat_ratio: float
+    max_missing_beat_run: int
+    anchor_is_manual: bool
+    candidate_margin: float
+
+
+@dataclass(frozen=True)
+class TempoResolution:
+    source_bpm: float
+    candidate_margin: float
 
 
 ANALYSIS_RATE = 22050
@@ -30,34 +41,30 @@ HOP = 512
 
 
 def normalize_bpm(bpm: float, minimum: float = 70.0, maximum: float = 130.0) -> float:
-    """Map a tempo estimate into the running range by powers of two.
-
-    Slow songs with a half-time feel (for example 67 BPM) and their
-    double-time readings (134 BPM) must both survive normalization, so this
-    returns the scaled value closest to the center of the interval instead of
-    cycling forever between two values that straddle it.
-    """
+    """Map a tempo estimate into the configured running range by powers of two."""
     if not np.isfinite(bpm) or bpm <= 0:
         raise TempoAnalysisError(f"Invalid BPM estimate: {bpm}")
     center = (minimum + maximum) / 2.0
-    scaled = float(bpm)
-    best = scaled
-    best_distance = abs(np.log(scaled / center))
-    while scaled * 2.0 <= maximum * 2.0:
-        scaled *= 2.0
-        distance = abs(np.log(scaled / center))
-        if distance < best_distance:
-            best, best_distance = scaled, distance
-    scaled = float(bpm)
-    while scaled / 2.0 >= minimum / 2.0:
-        scaled /= 2.0
-        distance = abs(np.log(scaled / center))
-        if distance < best_distance:
-            best, best_distance = scaled, distance
-    return best
+    candidates = [bpm * (2.0**power) for power in range(-8, 9)]
+    in_range = [value for value in candidates if minimum <= value <= maximum]
+    if in_range:
+        return float(min(in_range, key=lambda value: abs(np.log(value / center))))
+    return float(
+        min(
+            candidates,
+            key=lambda value: (
+                0.0
+                if minimum <= value <= maximum
+                else min(abs(value - minimum), abs(value - maximum)),
+                abs(np.log(value / center)),
+            ),
+        )
+    )
 
 
-def choose_target_bpm(source_bpm: float, preferred: tuple[float, ...] = (90.0, 95.0)) -> float:
+def choose_target_bpm(
+    source_bpm: float, preferred: tuple[float, ...] = (90.0, 95.0)
+) -> float:
     if source_bpm <= 0 or not preferred:
         raise ValueError("Source BPM and preferred target list must be positive")
     return min(preferred, key=lambda value: (abs(np.log(value / source_bpm)), -value))
@@ -112,12 +119,15 @@ def _tempo_candidates(
     if not np.any(mask):
         raise TempoAnalysisError("No tempo candidates found in the autocorrelation")
     peaks, props = find_peaks(
-        autocorr[mask], prominence=autocorr[mask].max() * 0.04
+        autocorr[mask], prominence=max(float(autocorr[mask].max()) * 0.04, 1e-12)
     )
+    if peaks.size == 0:
+        best = int(np.argmax(autocorr[mask]))
+        return [(float(bpms[mask][best]), float(autocorr[mask][best]))]
     order = np.argsort(props["prominences"])[::-1][:top_n]
     return [
-        (float(bpms[mask][peak]), float(props["prominences"][index]))
-        for index, peak in enumerate(peaks[order])
+        (float(bpms[mask][peaks[index]]), float(props["prominences"][index]))
+        for index in order
     ]
 
 
@@ -137,53 +147,45 @@ def _scaled_variants(bpm: float, low: float = 35.0, high: float = 300.0) -> list
 def _resolve_source_bpm(
     onset_envelope: np.ndarray,
     candidates: list[tuple[float, float]],
-    preferred: tuple[float, ...] = (90.0, 95.0),
-) -> tuple[float, float]:
-    """Pick the BPM and target whose grid actually carries the music.
-
-    Half-time feel songs can be read at several powers of two, so each
-    autocorrelation candidate is expanded to its variants. But numeric
-    proximity to a running target alone can pick a weak alias (for example
-    Blinding Lights reads 97.5 from a weak 48.8 autocorrelation peak while
-    its real 85.5 BPM quarter-note grid carries far more onset energy).
-    Combine normalized grid energy with target compatibility so the winning
-    variant must both align with the music and stretch reasonably.
-    """
-    variants: list[tuple[float, float]] = []
-    for candidate, _ in candidates:
+    minimum_bpm: float = 70.0,
+    maximum_bpm: float = 130.0,
+) -> TempoResolution:
+    """Resolve source tempo from audio evidence, independent of target preference."""
+    variants: list[tuple[float, float, float]] = []
+    max_prominence = max((prominence for _, prominence in candidates), default=1.0)
+    for candidate, prominence in candidates:
         for variant in _scaled_variants(candidate):
+            if not minimum_bpm <= variant <= maximum_bpm:
+                continue
             period_frames = 60.0 / variant * ANALYSIS_RATE / HOP
             if period_frames <= 1.0:
                 continue
+            phase_step = max(0.5, min(2.0, period_frames / 32.0))
             energy = max(
                 _grid_energy(onset_envelope, period_frames, phase)
-                for phase in np.arange(0.0, period_frames, 0.5)
+                for phase in np.arange(0.0, period_frames, phase_step)
             )
-            distance = min(
-                abs(np.log(preferred_value / variant)) for preferred_value in preferred
+            variants.append(
+                (
+                    variant,
+                    energy,
+                    prominence / max_prominence if max_prominence > 0 else 0.0,
+                )
             )
-            variants.append((variant, energy, distance))
     if not variants:
         raise TempoAnalysisError("Could not resolve a source BPM from candidates")
 
-    # Grid energy is extremely sensitive to BPM precision (a 0.7% error can
-    # halve it), so refine the top coarse candidates to a fractional period
-    # before scoring them. Refining every variant is too slow; the top three
-    # carry all realistic interpretations.
-    # Refine the top candidates by combined score (energy and target
-    # compatibility), not raw energy: a high-energy alias such as a weak
-    # autocorrelation peak at 4x the real BPM has zero compatibility and must
-    # not consume the refinement budget.
-    max_coarse_energy = max(energy for _, energy, _ in variants)
+    max_energy = max(energy for _, energy, _ in variants)
     variants.sort(
         key=lambda item: (
-            (item[1] / max_coarse_energy if max_coarse_energy > 0 else 0.0)
-            * max(0.0, 1.0 - item[2] / 0.12)
+            0.75 * (item[1] / max_energy if max_energy > 0 else 0.0)
+            + 0.25 * item[2]
         ),
         reverse=True,
     )
-    refined: list[tuple[float, float, float]] = []
-    for variant, _, _ in variants[:3]:
+
+    refined: list[tuple[float, float, float, float]] = []
+    for variant, _, prominence_score in variants[:6]:
         period_frames = 60.0 / variant * ANALYSIS_RATE / HOP
         refined_period, refined_phase = _refine_grid(
             onset_envelope,
@@ -194,20 +196,27 @@ def _resolve_source_bpm(
         )
         energy = _grid_energy(onset_envelope, refined_period, refined_phase)
         refined_bpm = 60.0 / (refined_period * HOP / ANALYSIS_RATE)
-        refined_distance = min(
-            abs(np.log(preferred_value / refined_bpm)) for preferred_value in preferred
+        hit = _hit_ratio(
+            onset_envelope,
+            max(1, int(round(refined_period))),
+            int(round(refined_phase)) % max(1, int(round(refined_period))),
         )
-        refined.append((refined_bpm, energy, refined_distance))
+        refined.append((refined_bpm, energy, hit, prominence_score))
 
-    max_energy = max(energy for _, energy, _ in refined)
-    best_bpm, _, _ = max(
-        refined,
-        key=lambda item: (
-            (item[1] / max_energy if max_energy > 0 else 0.0)
-            * max(0.0, 1.0 - item[2] / 0.12)
-        ),
-    )
-    return best_bpm, choose_target_bpm(best_bpm, preferred)
+    max_energy = max(energy for _, energy, _, _ in refined)
+    max_hit = max(hit for _, _, hit, _ in refined)
+
+    def score(item: tuple[float, float, float, float]) -> float:
+        _, energy, hit, prominence = item
+        energy_score = energy / max_energy if max_energy > 0 else 0.0
+        hit_score = hit / max_hit if max_hit > 0 else 0.0
+        return 0.55 * energy_score + 0.30 * hit_score + 0.15 * prominence
+
+    refined.sort(key=score, reverse=True)
+    best = refined[0]
+    best_score = score(best)
+    second_score = score(refined[1]) if len(refined) > 1 else 0.0
+    return TempoResolution(best[0], max(0.0, best_score - second_score))
 
 
 def _grid_energy(
@@ -221,7 +230,7 @@ def _grid_energy(
     positions = positions[(positions >= 0) & (positions < onset_envelope.size)]
     if positions.size == 0:
         return 0.0
-    return float(onset_envelope[positions].sum())
+    return float(np.mean(onset_envelope[positions]))
 
 
 def _grid_phase_search(
@@ -244,16 +253,7 @@ def _refine_grid(
     period_radius: float = 1.0,
     period_step: float = 0.02,
 ) -> tuple[float, float]:
-    """Jointly refine the grid period and phase on a fractional scale.
-
-    Integer-frame autocorrelation only resolves BPM to about one frame
-    (~1.7% at 90 BPM), which lets click grids drift noticeably over a full
-    song. A coarse fractional-period scan with a full fractional-phase sweep
-    finds the right attraction basin, then a fine scan around the best
-    candidate locks in the exact quantization grid. The integer phase is
-    unreliable when the true period is non-integer, so it is never used as a
-    starting point here.
-    """
+    """Jointly refine the grid period and phase on a fractional scale."""
     best_period = float(period_frames)
     best_phase = float(phase_frames)
     best_score = _grid_energy(onset_envelope, best_period, best_phase)
@@ -295,6 +295,8 @@ def _hit_ratio(
     sample_phases: int = 12,
     seed: int = 0,
 ) -> float:
+    period_frames = max(1, period_frames)
+    phase %= period_frames
     rng = np.random.default_rng(seed)
     on_grid = onset_envelope[phase::period_frames].mean()
     off_total = 0.0
@@ -304,67 +306,55 @@ def _hit_ratio(
     off_grid = off_total / sample_phases
     if off_grid <= 0:
         return 1.0
-    return float(on_grid / off_grid)
-
-
-def fit_click_grid(
-    audio: np.ndarray,
-    sample_rate: int,
-    expected_bpm: float,
-    period_fraction: float = 0.015,
-) -> tuple[float, float]:
-    """Fit the stretched audio's real quarter-note grid for click placement.
-
-    Theoretical target BPM never matches the post-stretch audio exactly
-    (analysis BPM error and codec behavior both leak in), so clicks should
-    follow a grid fitted to the actual stretched audio near the expected
-    target. Returns (period_seconds, phase_seconds).
-    """
-    onset_envelope = _onset_envelope(audio, sample_rate)
-    expected_period = 60.0 / expected_bpm * ANALYSIS_RATE / HOP
-    period_frames, phase = _refine_grid(
-        onset_envelope,
-        expected_period,
-        0.0,
-        period_radius=expected_period * period_fraction,
-        period_step=0.002,
-    )
-    return (
-        period_frames * HOP / ANALYSIS_RATE,
-        phase * HOP / ANALYSIS_RATE,
-    )
+    return float(np.clip(on_grid / off_grid, 0.0, 4.0) / 4.0)
 
 
 def _snap_beats_to_onsets(
     onset_envelope: np.ndarray,
     beat_frames: np.ndarray,
-    period_frames: int,
+    beat_ordinals: np.ndarray,
+    period_frames: float,
     snap_fraction: float = 0.05,
-) -> np.ndarray:
-    """Pull each grid beat to the nearest onset peak inside a snap window.
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return only observed onset peaks and their original grid ordinals."""
+    if beat_frames.size != beat_ordinals.size:
+        raise TempoAnalysisError("Beat frames and ordinals must have equal length")
+    if beat_frames.size == 0:
+        return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
 
-    The pure grid is an idealized straight line; snapping it to the closest
-    local onset peak recovers the song's real micro-timing, which is what
-    drift correction and alignment error reports should measure. Picking the
-    nearest peak rather than the strongest one avoids jumping to an adjacent
-    eighth-note hat when a busy drum pattern dominates the onset envelope.
-    """
-    window = max(1, int(round(period_frames * snap_fraction)))
-    snapped: list[int] = []
-    for beat in beat_frames:
-        low = max(0, int(beat) - window)
-        high = min(onset_envelope.size - 1, int(beat) + window)
-        segment = onset_envelope[low : high + 1]
-        if segment.size == 0:
-            snapped.append(int(beat))
+    envelope_max = float(np.max(onset_envelope))
+    prominence = max(float(np.std(onset_envelope)) * 0.05, envelope_max * 0.01, 1e-8)
+    narrow_window = max(1, int(round(period_frames * snap_fraction)))
+    wide_window = max(narrow_window, int(round(period_frames * 0.15)))
+    observed_frames: list[int] = []
+    observed_ordinals: list[int] = []
+
+    for beat, ordinal in zip(beat_frames, beat_ordinals, strict=True):
+        center = int(beat)
+        selected: int | None = None
+        # Prefer the nearest onset peak inside the narrow window; only fall
+        # back to the wider window when the beat lands in a quiet gap.
+        for window in (narrow_window, wide_window):
+            low = max(0, center - window)
+            high = min(onset_envelope.size - 1, center + window)
+            segment = onset_envelope[low : high + 1]
+            if segment.size == 0:
+                continue
+            peaks, _ = find_peaks(segment, prominence=prominence)
+            if peaks.size == 0:
+                continue
+            nearest = int(peaks[int(np.argmin(np.abs(peaks - (center - low))))])
+            selected = low + nearest
+            break
+        if selected is None:
             continue
-        peaks, _ = find_peaks(segment)
-        if peaks.size == 0:
-            snapped.append(int(beat))
-            continue
-        nearest = int(peaks[int(np.argmin(np.abs(peaks - (int(beat) - low))))])
-        snapped.append(low + nearest)
-    return np.asarray(snapped, dtype=np.int64)
+        observed_frames.append(selected)
+        observed_ordinals.append(int(ordinal))
+
+    return (
+        np.asarray(observed_frames, dtype=np.int64),
+        np.asarray(observed_ordinals, dtype=np.int64),
+    )
 
 
 def _fit_grid(beat_times: np.ndarray) -> tuple[float, float, np.ndarray]:
@@ -375,53 +365,72 @@ def _fit_grid(beat_times: np.ndarray) -> tuple[float, float, np.ndarray]:
     return float(period), float(origin), residuals
 
 
-def _segmented_drift(
-    onset_envelope: np.ndarray,
-    period_frames: int,
-    phase: int,
-    segments: int = 8,
-    search_radius_frames: int = 3,
-) -> float:
-    """Estimate end-to-start phase drift with a fine local phase search.
+def _observation_metrics(
+    beat_times: np.ndarray,
+    beat_ordinals: np.ndarray,
+    anchor_seconds: float,
+    period_seconds: float,
+) -> tuple[float, float, float]:
+    expected = anchor_seconds + beat_ordinals.astype(np.float64) * period_seconds
+    residuals = beat_times - expected
+    absolute_ms = np.abs(residuals) * 1000.0
+    if absolute_ms.size == 0:
+        return float("inf"), float("inf"), float("inf")
+    drift_ms = 0.0
+    if residuals.size >= 2:
+        drift_ms = abs(float(residuals[-1] - residuals[0])) * 1000.0
+    return (
+        float(np.percentile(absolute_ms, 50)),
+        float(np.percentile(absolute_ms, 95)),
+        drift_ms,
+    )
 
-    A full re-search per segment can jump to an adjacent sixteenth-note grid
-    on dense, quantized electronic music and report fake drift. Instead each
-    segment only searches a small radius around the globally extrapolated
-    phase, so the reported drift reflects genuine micro-tempo movement rather
-    than a re-quantization artifact.
-    """
-    if segments < 2 or onset_envelope.size <= period_frames * 2:
-        return 0.0
-    edges = np.linspace(0, onset_envelope.size, segments + 1).astype(int)
-    residuals: list[float] = []
-    for index in range(segments):
-        window = onset_envelope[edges[index] : edges[index + 1]]
-        if window.size < period_frames * 2:
-            continue
-        expected_phase = phase + index * period_frames - edges[index]
-        radius = max(1, search_radius_frames)
-        candidate_range = range(
-            max(0, expected_phase - radius),
-            min(period_frames, expected_phase + radius + 1),
-        )
-        best_phase, best_sum = expected_phase, -1.0
-        for candidate in candidate_range:
-            total = float(window[candidate::period_frames].sum())
-            if total > best_sum:
-                best_sum, best_phase = total, candidate
-        residual = (edges[index] + best_phase) - (phase + index * period_frames)
-        residuals.append(float(residual))
-    if len(residuals) < 2:
-        return 0.0
-    # Random per-segment search noise averages out in a linear fit; a genuine
-    # tempo drift shows up as a significant slope.
-    if len(residuals) >= 4:
-        slope = float(np.polyfit(np.arange(len(residuals)), residuals, 1)[0])
-        drift_frames = slope * (len(residuals) - 1)
-    else:
-        drift_frames = residuals[-1] - residuals[0]
-    drift_seconds = drift_frames * HOP / ANALYSIS_RATE
-    return abs(drift_seconds) * 1000.0
+
+def _max_missing_beat_run(
+    candidate_ordinals: np.ndarray,
+    observed_ordinals: np.ndarray,
+) -> int:
+    candidates = np.asarray(candidate_ordinals, dtype=np.int64)
+    observed = np.asarray(observed_ordinals, dtype=np.int64)
+    if candidates.size == 0:
+        return 0
+    observed_set = set(int(value) for value in observed)
+    longest = 0
+    current = 0
+    for ordinal in candidates:
+        if int(ordinal) in observed_set:
+            current = 0
+        else:
+            current += 1
+            longest = max(longest, current)
+    return int(longest)
+
+
+def fit_click_grid(
+    audio: np.ndarray,
+    sample_rate: int,
+    expected_bpm: float,
+    anchor_hint_seconds: float | None = None,
+    lock_anchor: bool = False,
+    period_fraction: float = 0.015,
+) -> tuple[float, float]:
+    """Fit a quarter-note period near expected BPM and return period/phase seconds."""
+    onset_envelope = _onset_envelope(audio, sample_rate)
+    expected_period = 60.0 / expected_bpm * ANALYSIS_RATE / HOP
+    phase_hint = 0.0
+    if anchor_hint_seconds is not None:
+        phase_hint = (anchor_hint_seconds * ANALYSIS_RATE / HOP) % expected_period
+    period_frames, phase = _refine_grid(
+        onset_envelope,
+        expected_period,
+        phase_hint,
+        period_radius=expected_period * period_fraction,
+        period_step=0.002,
+    )
+    period_seconds = period_frames * HOP / ANALYSIS_RATE
+    if lock_anchor and anchor_hint_seconds is not None:
+        return period_seconds, float(anchor_hint_seconds)
+    return period_seconds, phase * HOP / ANALYSIS_RATE
 
 
 def analyze_tempo(
@@ -431,10 +440,10 @@ def analyze_tempo(
 ) -> TempoAnalysis:
     onset_envelope = _onset_envelope(audio, sample_rate)
     candidates = _tempo_candidates(onset_envelope)
-    source_bpm, _ = _resolve_source_bpm(onset_envelope, candidates)
+    resolution = _resolve_source_bpm(onset_envelope, candidates)
+    source_bpm = resolution.source_bpm
 
-    period_seconds = 60.0 / source_bpm
-    expected_period = period_seconds * ANALYSIS_RATE / HOP
+    expected_period = 60.0 / source_bpm * ANALYSIS_RATE / HOP
     integer_period = max(1, int(round(expected_period)))
     integer_phase, _ = _grid_phase_search(onset_envelope, integer_period)
     period_frames, phase = _refine_grid(
@@ -444,58 +453,88 @@ def analyze_tempo(
         period_radius=expected_period * 0.015,
         period_step=0.002,
     )
-    hit = _hit_ratio(onset_envelope, int(round(period_frames)), int(round(phase)))
 
-    # Build the quarter-note beat grid from the refined fractional grid, then
-    # pull each beat to its local onset peak so real micro-timing survives
-    # into reports and the strict time map.
-    last_index = int((onset_envelope.size - phase) // period_frames)
-    indexes = np.arange(last_index + 1)
-    grid_frames = np.rint(phase + indexes * period_frames).astype(np.int64)
-    grid_frames = grid_frames[grid_frames < onset_envelope.size]
-    beat_frames = _snap_beats_to_onsets(
-        onset_envelope, grid_frames, int(round(period_frames))
+    if first_beat is not None:
+        if not np.isfinite(first_beat) or first_beat < 0 or first_beat >= audio.shape[0] / sample_rate:
+            raise TempoAnalysisError("First-beat anchor is outside the audio duration")
+        anchor_frame = first_beat * ANALYSIS_RATE / HOP
+        first_grid_index = int(np.ceil((0.0 - anchor_frame) / period_frames))
+        last_grid_index = int(np.floor((onset_envelope.size - anchor_frame) / period_frames))
+        grid_indexes = np.arange(first_grid_index, last_grid_index + 1, dtype=np.int64)
+        grid_frames = np.rint(anchor_frame + grid_indexes * period_frames).astype(np.int64)
+        valid = (grid_frames >= 0) & (grid_frames < onset_envelope.size)
+        grid_frames = grid_frames[valid]
+        grid_indexes = grid_indexes[valid]
+        anchor = float(first_beat)
+        grid_origin = anchor
+    else:
+        last_index = int((onset_envelope.size - phase) // period_frames)
+        grid_indexes = np.arange(last_index + 1, dtype=np.int64)
+        grid_frames = np.rint(phase + grid_indexes * period_frames).astype(np.int64)
+        valid = (grid_frames >= 0) & (grid_frames < onset_envelope.size)
+        grid_frames = grid_frames[valid]
+        grid_indexes = grid_indexes[valid]
+        anchor = 0.0
+        grid_origin = phase * HOP / ANALYSIS_RATE
+
+    observed_frames, observed_ordinals = _snap_beats_to_onsets(
+        onset_envelope,
+        grid_frames,
+        grid_indexes,
+        period_frames,
     )
-    beat_times = (beat_frames * HOP / ANALYSIS_RATE).astype(np.float64)
-
-    if beat_times.size < 8:
+    if observed_frames.size < 8:
         raise TempoAnalysisError(
-            f"Only {beat_times.size} grid beats were detected; at least 8 are required"
+            f"Only {observed_frames.size} observed grid beats were detected; at least 8 are required"
         )
 
-    grid_residual_frames = beat_frames - grid_frames
-    absolute_ms = np.abs(grid_residual_frames) * HOP / ANALYSIS_RATE * 1000.0
-    p50 = float(np.percentile(absolute_ms, 50))
-    p95 = float(np.percentile(absolute_ms, 95))
-    drift_ms = _segmented_drift(
-        onset_envelope, int(round(period_frames)), int(round(phase))
+    beat_times = observed_frames * HOP / ANALYSIS_RATE
+    if first_beat is None:
+        anchor = float(beat_times[0])
+        first_ordinal = int(observed_ordinals[0])
+        observed_ordinals = observed_ordinals - first_ordinal
+        grid_origin = anchor
+
+    period_seconds = period_frames * HOP / ANALYSIS_RATE
+    p50, p95, observed_drift = _observation_metrics(
+        beat_times, observed_ordinals, anchor, period_seconds
+    )
+    coverage = float(observed_frames.size / max(1, grid_frames.size))
+    max_missing_run = _max_missing_beat_run(grid_indexes, observed_ordinals)
+    hit = _hit_ratio(
+        onset_envelope,
+        max(1, int(round(period_frames))),
+        int(round(phase)) % max(1, int(round(period_frames))),
+    )
+    grid_quality = float(np.exp(-p95 / 45.0))
+    base_confidence = (
+        0.35 * hit
+        + 0.30 * min(1.0, coverage)
+        + 0.20 * grid_quality
+        + 0.15 * min(1.0, resolution.candidate_margin * 8.0)
+    )
+    gap_penalty = min(1.0, 8.0 / max(1.0, max_missing_run + 1.0))
+    confidence = float(
+        np.clip(base_confidence * min(1.0, coverage) * gap_penalty, 0.0, 1.0)
     )
 
-    # Confidence combines how much onset energy lands on the grid (hit ratio)
-    # with how reasonable the required stretch is. On dense pop productions a
-    # modest hit ratio is normal, so a small stretch to a running target makes
-    # the resolution trustworthy even when no single autocorrelation peak
-    # dominates.
-    stretch_ratio = 90.0 / source_bpm
-    stretch_penalty = max(0.0, 1.0 - abs(np.log(stretch_ratio)) / 0.12)
-    confidence = float(np.clip(hit * 0.6 + stretch_penalty * 0.4, 0.0, 1.0))
-
-    anchor = float(first_beat) if first_beat is not None else float(beat_times[0])
-    if not np.isfinite(anchor) or anchor < 0 or anchor >= audio.shape[0] / sample_rate:
-        raise TempoAnalysisError("First-beat anchor is outside the audio duration")
-
-    refined_bpm = 60.0 / (period_frames * HOP / ANALYSIS_RATE)
+    refined_bpm = 60.0 / period_seconds
     return TempoAnalysis(
         raw_bpm=candidates[0][0],
         source_bpm=refined_bpm,
-        beat_times=beat_times,
+        beat_times=beat_times.astype(np.float64),
+        beat_ordinals=observed_ordinals.astype(np.int64),
         anchor_seconds=anchor,
-        grid_period_seconds=period_frames * HOP / ANALYSIS_RATE,
-        grid_origin_seconds=phase * HOP / ANALYSIS_RATE,
+        grid_period_seconds=period_seconds,
+        grid_origin_seconds=grid_origin,
         grid_error_p50_ms=p50,
         grid_error_p95_ms=p95,
-        estimated_end_drift_ms=drift_ms,
+        estimated_end_drift_ms=float(observed_drift),
         confidence=confidence,
+        observed_beat_ratio=coverage,
+        max_missing_beat_run=max_missing_run,
+        anchor_is_manual=first_beat is not None,
+        candidate_margin=resolution.candidate_margin,
     )
 
 
@@ -504,13 +543,15 @@ def alignment_result(
     p95_ms: float,
     end_drift_ms: float,
     threshold_p95_ms: float = 30.0,
+    threshold_end_drift_ms: float = 50.0,
 ) -> dict[str, float | bool]:
     return {
         "predicted_p50_ms": p50_ms,
         "predicted_p95_ms": p95_ms,
         "estimated_end_drift_ms": end_drift_ms,
         "threshold_p95_ms": threshold_p95_ms,
-        "passed": p95_ms <= threshold_p95_ms,
+        "threshold_end_drift_ms": threshold_end_drift_ms,
+        "passed": p95_ms <= threshold_p95_ms and end_drift_ms <= threshold_end_drift_ms,
     }
 
 
@@ -520,23 +561,36 @@ def transformed_alignment(
     stretch_ratio: float,
     target_bpm: float,
     strict: bool,
+    beat_ordinals: np.ndarray | None = None,
+    output_grid_period_seconds: float | None = None,
+    output_grid_origin_seconds: float | None = None,
 ) -> dict[str, float | bool]:
-    anchor_output = anchor_input / stretch_ratio
-    source_bpm = target_bpm / stretch_ratio
-    indexes = np.rint((beat_times - anchor_input) * source_bpm / 60.0)
-    target_times = anchor_output + indexes * 60.0 / target_bpm
-    if strict:
-        mapped = target_times
+    beats = np.asarray(beat_times, dtype=np.float64)
+    if beats.size == 0:
+        raise TempoAnalysisError("At least one beat is required for alignment")
+    if beat_ordinals is None:
+        source_bpm = target_bpm / stretch_ratio
+        ordinals = np.rint((beats - anchor_input) * source_bpm / 60.0).astype(np.int64)
     else:
-        mapped = beat_times / stretch_ratio
-    errors_ms = np.abs(mapped - target_times) * 1000.0
+        ordinals = np.asarray(beat_ordinals, dtype=np.int64)
+        if ordinals.shape != beats.shape:
+            raise TempoAnalysisError("Beat times and ordinals must have equal shape")
+
+    period = output_grid_period_seconds or 60.0 / target_bpm
+    origin = (
+        output_grid_origin_seconds
+        if output_grid_origin_seconds is not None
+        else anchor_input / stretch_ratio
+    )
+    target_times = origin + ordinals.astype(np.float64) * period
+    mapped = target_times if strict else beats / stretch_ratio
+    signed_errors = mapped - target_times
+    errors_ms = np.abs(signed_errors) * 1000.0
     p50 = float(np.percentile(errors_ms, 50))
     p95 = float(np.percentile(errors_ms, 95))
-    end_drift = float(
-        abs(
-            (mapped[-1] - target_times[-1])
-            - (mapped[0] - target_times[0])
-        )
-        * 1000.0
+    end_drift = (
+        abs(float(signed_errors[-1] - signed_errors[0])) * 1000.0
+        if signed_errors.size >= 2
+        else 0.0
     )
     return alignment_result(p50, p95, end_drift)

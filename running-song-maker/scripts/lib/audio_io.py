@@ -4,15 +4,68 @@ import locale
 import math
 import shutil
 import subprocess
+from dataclasses import dataclass
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
-from scipy.signal import correlate, correlation_lags
+from scipy.signal import correlate, correlation_lags, resample_poly
 
 
 class AudioProcessingError(RuntimeError):
     """Raised when an audio file cannot be decoded, encoded, or validated."""
+
+
+@dataclass(frozen=True)
+class OutputSpec:
+    suffix: str
+    format_name: str
+    lossy: bool
+    codec_args: tuple[str, ...] = ()
+    planned_sample_rate: int | None = None
+    duration_tolerance_seconds: float | None = None
+    delay_tolerance_seconds: float | None = None
+
+
+_OUTPUT_SPECS: dict[str, OutputSpec] = {
+    ".wav": OutputSpec(".wav", "WAV", False),
+    ".flac": OutputSpec(".flac", "FLAC", False),
+    ".mp3": OutputSpec(
+        ".mp3",
+        "MP3",
+        True,
+        ("-c:a", "libmp3lame", "-q:a", "2"),
+        planned_sample_rate=48000,
+        duration_tolerance_seconds=0.04,
+        delay_tolerance_seconds=0.04,
+    ),
+    ".m4a": OutputSpec(
+        ".m4a",
+        "M4A",
+        True,
+        ("-c:a", "aac", "-b:a", "256k"),
+        duration_tolerance_seconds=0.04,
+        delay_tolerance_seconds=0.04,
+    ),
+    ".aac": OutputSpec(
+        ".aac",
+        "AAC",
+        True,
+        ("-c:a", "aac", "-b:a", "256k"),
+        duration_tolerance_seconds=0.08,
+        delay_tolerance_seconds=0.05,
+    ),
+    ".opus": OutputSpec(
+        ".opus",
+        "Opus",
+        True,
+        ("-c:a", "libopus", "-b:a", "192k"),
+        planned_sample_rate=48000,
+        duration_tolerance_seconds=0.04,
+        delay_tolerance_seconds=0.04,
+    ),
+}
 
 
 def find_executable(name: str) -> str | None:
@@ -98,20 +151,45 @@ def decode_audio(input_path: Path, decoded_wav: Path | None = None) -> tuple[np.
     return _read_audio(decoded_wav)
 
 
+def resample_audio(
+    samples: np.ndarray,
+    input_sample_rate: int,
+    output_sample_rate: int,
+) -> np.ndarray:
+    if input_sample_rate <= 0 or output_sample_rate <= 0:
+        raise ValueError("Sample rates must be positive")
+    audio = np.asarray(samples, dtype=np.float32)
+    if input_sample_rate == output_sample_rate:
+        return audio.copy()
+    ratio = Fraction(output_sample_rate, input_sample_rate).limit_denominator(10000)
+    channels = audio[:, np.newaxis] if audio.ndim == 1 else audio
+    resampled = resample_poly(
+        channels.astype(np.float64), ratio.numerator, ratio.denominator, axis=0
+    ).astype(np.float32)
+    return resampled[:, 0] if audio.ndim == 1 else resampled
+
+
+def resolve_output_spec(output_path: Path, input_sample_rate: int) -> OutputSpec:
+    suffix = output_path.suffix.lower()
+    try:
+        spec = _OUTPUT_SPECS[suffix]
+    except KeyError as exc:
+        supported = ", ".join(sorted(_OUTPUT_SPECS))
+        raise AudioProcessingError(
+            f"Unsupported output format '{suffix or '<none>'}'. Supported formats: {supported}"
+        ) from exc
+    if input_sample_rate <= 0:
+        raise AudioProcessingError("Input sample rate must be positive")
+    return spec
+
+
+def output_sample_rate(spec: OutputSpec, input_sample_rate: int) -> int:
+    return spec.planned_sample_rate or input_sample_rate
+
+
 def write_pcm_wav(path: Path, samples: np.ndarray, sample_rate: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     sf.write(path, samples, sample_rate, format="WAV", subtype="FLOAT")
-
-
-def _ffmpeg_audio_codec(output_path: Path) -> list[str]:
-    suffix = output_path.suffix.lower()
-    if suffix == ".mp3":
-        return ["-c:a", "libmp3lame", "-q:a", "2"]
-    if suffix in {".m4a", ".aac"}:
-        return ["-c:a", "aac", "-b:a", "256k"]
-    if suffix == ".opus":
-        return ["-c:a", "libopus", "-b:a", "192k"]
-    return []
 
 
 def write_output_audio(
@@ -119,20 +197,20 @@ def write_output_audio(
     samples: np.ndarray,
     sample_rate: int,
     temporary_wav: Path,
-) -> None:
+) -> OutputSpec:
     output_path = output_path.resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    suffix = output_path.suffix.lower()
+    spec = resolve_output_spec(output_path, sample_rate)
 
-    if suffix in {".wav", ".flac"}:
+    if not spec.lossy:
         sf.write(
             output_path,
             samples,
             sample_rate,
-            format=suffix.removeprefix(".").upper(),
+            format=spec.format_name,
             subtype="PCM_24",
         )
-        return
+        return spec
 
     ffmpeg = require_executable("ffmpeg")
     sf.write(temporary_wav, samples, sample_rate, format="WAV", subtype="PCM_24")
@@ -144,10 +222,13 @@ def write_output_audio(
         "-i",
         str(temporary_wav),
         "-vn",
-        *_ffmpeg_audio_codec(output_path),
-        str(output_path),
+        *spec.codec_args,
     ]
+    if spec.planned_sample_rate is not None:
+        command.extend(["-ar", str(spec.planned_sample_rate)])
+    command.append(str(output_path))
     run_command(command, "FFmpeg audio encode")
+    return spec
 
 
 def duration_seconds(samples: np.ndarray, sample_rate: int) -> float:

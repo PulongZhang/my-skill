@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,7 +16,14 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = SKILL_DIR / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from lib.audio_io import peak_dbfs  # noqa: E402
+from lib.audio_io import (  # noqa: E402
+    AudioProcessingError,
+    decode_audio,
+    output_sample_rate,
+    peak_dbfs,
+    resolve_output_spec,
+    write_output_audio,
+)
 from lib.click_track import (  # noqa: E402
     click_sample_positions,
     generate_click_track,
@@ -23,6 +31,10 @@ from lib.click_track import (  # noqa: E402
     mix_fixed_click,
 )
 from lib.tempo_analysis import (  # noqa: E402
+    _max_missing_beat_run,
+    _observation_metrics,
+    _resolve_source_bpm,
+    _snap_beats_to_onsets,
     analyze_tempo,
     choose_target_bpm,
     normalize_bpm,
@@ -109,6 +121,111 @@ class TempoRuleTests(unittest.TestCase):
         actual_last = positions[-1] / sample_rate
         self.assertLessEqual(abs(actual_last - times[-1]), 0.5 / sample_rate)
         self.assertAlmostEqual(60.0 / (30.0 / 95.0), 190.0)
+
+
+class ObservationEvidenceTests(unittest.TestCase):
+    def test_missing_ordinal_runs_are_reported(self):
+        missing = _max_missing_beat_run(
+            np.arange(0, 12, dtype=np.int64),
+            np.asarray([0, 1, 2, 8, 9, 10], dtype=np.int64),
+        )
+        self.assertEqual(missing, 5)
+
+    def test_missing_onset_is_not_replaced_by_theoretical_grid_point(self):
+        envelope = np.zeros(100, dtype=np.float64)
+        envelope[11] = 1.0
+        envelope[31] = 1.0
+        frames, ordinals = _snap_beats_to_onsets(
+            envelope,
+            np.asarray([11, 21, 31], dtype=np.int64),
+            np.asarray([0, 1, 2], dtype=np.int64),
+            period_frames=20.0,
+            snap_fraction=0.1,
+        )
+        np.testing.assert_array_equal(frames, np.asarray([11, 31]))
+        np.testing.assert_array_equal(ordinals, np.asarray([0, 2]))
+
+    def test_observation_metrics_keep_ordinal_gaps_in_drift_measurement(self):
+        p50, p95, end_drift = _observation_metrics(
+            np.asarray([0.0, 1.0, 2.1]),
+            np.asarray([0, 2, 4]),
+            anchor_seconds=0.0,
+            period_seconds=0.5,
+        )
+        self.assertAlmostEqual(p50, 0.0, places=6)
+        self.assertAlmostEqual(p95, 90.0, places=6)
+        self.assertAlmostEqual(end_drift, 100.0, places=6)
+
+    def test_source_bpm_resolution_has_no_target_preference_argument(self):
+        period_frames = 60.0 / 110.0 * 22050.0 / 512.0
+        envelope = np.zeros(2200, dtype=np.float64)
+        for frame in np.arange(20.0, envelope.size - 20.0, period_frames):
+            center = int(round(frame))
+            envelope[center] = 1.0
+        resolution = _resolve_source_bpm(
+            envelope,
+            [(110.0, 1.0), (90.0, 0.2)],
+        )
+        self.assertAlmostEqual(resolution.source_bpm, 110.0, delta=1.5)
+
+
+class OutputFormatTests(unittest.TestCase):
+    def test_unknown_output_extension_is_rejected_before_encoding(self):
+        with self.assertRaises(AudioProcessingError):
+            resolve_output_spec(Path("output.unknown"), 48000)
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg is required for codec matrix")
+    def test_codec_matrix_redecodes_and_opus_uses_48_khz(self):
+        sample_rate = 22050
+        time = np.arange(sample_rate, dtype=np.float32) / sample_rate
+        samples = np.column_stack(
+            (
+                0.1 * np.sin(2.0 * np.pi * 220.0 * time),
+                0.1 * np.sin(2.0 * np.pi * 330.0 * time),
+            )
+        ).astype(np.float32)
+        suffixes = (".wav", ".flac", ".mp3", ".m4a", ".aac", ".opus")
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            for suffix in suffixes:
+                output_path = directory / f"output{suffix}"
+                temporary_wav = directory / f"master{suffix}.wav"
+                spec = write_output_audio(
+                    output_path, samples, sample_rate, temporary_wav
+                )
+                decoded, decoded_rate = decode_audio(
+                    output_path, directory / f"decoded{suffix}.wav"
+                )
+                self.assertEqual(decoded.shape[1], 2)
+                self.assertEqual(
+                    decoded_rate,
+                    output_sample_rate(spec, sample_rate),
+                )
+                if suffix == ".opus":
+                    self.assertEqual(decoded_rate, 48000)
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg is required for MP3 rate test")
+    def test_mp3_output_plan_resamples_high_rate_input(self):
+        sample_rate = 96000
+        time = np.arange(sample_rate // 10, dtype=np.float32) / sample_rate
+        samples = np.column_stack(
+            (
+                0.1 * np.sin(2.0 * np.pi * 220.0 * time),
+                0.1 * np.sin(2.0 * np.pi * 330.0 * time),
+            )
+        ).astype(np.float32)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            output_path = directory / "output.mp3"
+            spec = write_output_audio(
+                output_path,
+                samples,
+                sample_rate,
+                directory / "master.wav",
+            )
+            _, decoded_rate = decode_audio(output_path, directory / "decoded.wav")
+            self.assertEqual(decoded_rate, 48000)
+            self.assertEqual(output_sample_rate(spec, sample_rate), 48000)
 
 
 class ClickMixTests(unittest.TestCase):
@@ -231,6 +348,24 @@ class AnalysisAndCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn("--target-bpm", result.stdout)
 
+    def test_analyze_only_does_not_require_click_asset(self):
+        sample_rate = 22050
+        song = synthetic_song(sample_rate)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            input_path = directory / "synthetic.wav"
+            sf.write(input_path, song, sample_rate, subtype="PCM_16")
+            result = run_cli(
+                "--input",
+                str(input_path),
+                "--click-file",
+                str(directory / "missing-click.wav"),
+                "--analyze-only",
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertIn("analysis", payload)
+
     def test_cli_generates_no_stretch_wav_and_report(self):
         sample_rate = 22050
         song = synthetic_song(sample_rate)
@@ -308,6 +443,63 @@ class AnalysisAndCliTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(collision.exists())
             self.assertIn("must be distinct", result.stderr)
+
+    def test_cli_rejects_max_stretch_above_twelve_percent(self):
+        result = run_cli(
+            "--input",
+            "missing.wav",
+            "--max-stretch-percent",
+            "12.1",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("between 0 and 12", result.stderr)
+
+    def test_default_output_respects_explicit_report_path(self):
+        sample_rate = 22050
+        song = synthetic_song(sample_rate)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            input_path = directory / "synthetic.wav"
+            report_path = directory / "custom-report.json"
+            sf.write(input_path, song, sample_rate, subtype="PCM_16")
+            result = run_cli(
+                "--input",
+                str(input_path),
+                "--target-bpm",
+                "90",
+                "--tempo-mode",
+                "global",
+                "--report",
+                str(report_path),
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr + result.stdout)
+            output_path = directory / "synthetic(90bpm).wav"
+            self.assertTrue(output_path.is_file())
+            self.assertTrue(report_path.is_file())
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                report["output"]["report_path"], str(report_path.resolve())
+            )
+
+    def test_cli_rejects_click_asset_collision(self):
+        sample_rate = 22050
+        song = synthetic_song(sample_rate)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            input_path = directory / "synthetic.wav"
+            sf.write(input_path, song, sample_rate, subtype="PCM_16")
+            result = run_cli(
+                "--input",
+                str(input_path),
+                "--output",
+                str(CLICK_PATH),
+                "--target-bpm",
+                "90",
+                "--tempo-mode",
+                "global",
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("click and output", result.stderr.lower())
 
 
 if __name__ == "__main__":

@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
-from scipy.signal import resample_poly
 
-from .audio_io import apply_gain, peak_dbfs, rms_dbfs
+from .audio_io import apply_gain, peak_dbfs, resample_audio, rms_dbfs
 
 
 class ClickTrackError(RuntimeError):
@@ -47,8 +45,7 @@ def load_click_asset(path: Path, output_sample_rate: int) -> np.ndarray:
         raise ClickTrackError(f"Click asset is empty: {path}")
     mono = np.mean(samples, axis=1, dtype=np.float64).astype(np.float32)
     if sample_rate != output_sample_rate:
-        ratio = Fraction(output_sample_rate, sample_rate).limit_denominator(10000)
-        mono = resample_poly(mono, ratio.numerator, ratio.denominator).astype(np.float32)
+        mono = resample_audio(mono, sample_rate, output_sample_rate)
     if not np.all(np.isfinite(mono)) or not np.any(mono):
         raise ClickTrackError(f"Click asset contains no usable signal: {path}")
     return mono

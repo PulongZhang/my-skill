@@ -66,34 +66,36 @@ def _monotonic_beat_ordinals(
     source_bpm: float,
     tolerance_beats: float = 0.5,
 ) -> np.ndarray:
-    """Number beats monotonically using a local phase estimate around the anchor.
-
-    A global round-to-nearest against the fitted BPM can duplicate or skip
-    ordinals when a song's tempo drifts gradually, which creates artificial
-    local stretch spikes. Instead, take the closest beat to the anchor as the
-    zero reference, then propagate the integer count forward and backward with
-    local half-step checks to avoid double-counted or missing beats.
-    """
+    """Number beats monotonically using a local phase estimate around the anchor."""
     beats = np.asarray(beat_times, dtype=np.float64)
     if beats.size == 0:
         return np.zeros(0, dtype=np.int64)
+    if source_bpm <= 0 or not np.isfinite(source_bpm):
+        raise TempoStretchError("Source BPM must be positive and finite")
     anchor_index = int(np.argmin(np.abs(beats - anchor_seconds)))
     beat_period = 60.0 / source_bpm
+    tolerance = max(0.0, float(tolerance_beats))
 
     ordinals = np.zeros(beats.size, dtype=np.int64)
     ordinals[anchor_index] = 0
     previous_ordinal = 0
     for index in range(anchor_index + 1, beats.size):
         elapsed = beats[index] - beats[index - 1]
-        candidate = previous_ordinal + int(round(elapsed / beat_period))
-        candidate = max(candidate, previous_ordinal + 1)
+        estimate = elapsed / beat_period
+        step = int(round(estimate))
+        if abs(estimate - step) > tolerance:
+            step = 1
+        candidate = max(step, 1) + previous_ordinal
         ordinals[index] = candidate
         previous_ordinal = candidate
     previous_ordinal = 0
     for index in range(anchor_index - 1, -1, -1):
         elapsed = beats[index + 1] - beats[index]
-        candidate = previous_ordinal - int(round(elapsed / beat_period))
-        candidate = min(candidate, previous_ordinal - 1)
+        estimate = elapsed / beat_period
+        step = int(round(estimate))
+        if abs(estimate - step) > tolerance:
+            step = 1
+        candidate = previous_ordinal - max(step, 1)
         ordinals[index] = candidate
         previous_ordinal = candidate
     return ordinals
@@ -145,38 +147,57 @@ def build_time_map(
     sample_rate: int,
     max_local_tempo_change: float = 0.20,
     alignment_threshold_ms: float = 30.0,
+    beat_ordinals: np.ndarray | None = None,
 ) -> TimeMap:
     beats = np.asarray(beat_times, dtype=np.float64)
     if beats.ndim != 1 or beats.size < 8:
         raise TempoStretchError("At least 8 ordered beat times are required for a time map")
     if np.any(np.diff(beats) <= 0):
         raise TempoStretchError("Beat times must be strictly increasing")
+    if source_duration_seconds <= 0 or sample_rate <= 0:
+        raise TempoStretchError("Source duration and sample rate must be positive")
+    if not 0 <= anchor_input_seconds <= source_duration_seconds:
+        raise TempoStretchError("Time-map anchor must be inside the source duration")
+
+    if beat_ordinals is None:
+        ordinals = _monotonic_beat_ordinals(
+            beats, anchor_input_seconds, source_bpm, tolerance_beats=0.5
+        )
+    else:
+        ordinals = np.asarray(beat_ordinals, dtype=np.int64)
+        if ordinals.shape != beats.shape:
+            raise TempoStretchError("Beat times and beat ordinals must have equal shape")
+        if np.any(np.diff(ordinals) <= 0):
+            raise TempoStretchError("Beat ordinals must be strictly increasing")
 
     stretch_ratio = target_bpm / source_bpm
+    if not np.isfinite(stretch_ratio) or stretch_ratio <= 0:
+        raise TempoStretchError("Tempo ratio must be positive and finite")
     output_duration = source_duration_seconds / stretch_ratio
     anchor_output = anchor_input_seconds / stretch_ratio
-    beat_numbers = _monotonic_beat_ordinals(
-        beats, anchor_input_seconds, source_bpm, tolerance_beats=0.5
-    )
-    beat_targets = anchor_output + beat_numbers * 60.0 / target_bpm
+    beat_targets = anchor_output + ordinals.astype(np.float64) * 60.0 / target_bpm
 
     selected: _TimeMapCandidate | None = None
     for stride in (4, 2, 1):
-        mask = np.zeros(beats.size, dtype=bool)
-        mask[::stride] = True
+        mask = np.mod(ordinals, stride) == 0
         mask[-1] = True
-        source_points = beats[mask]
-        target_points = beat_targets[mask]
+        selected_source = beats[mask]
+        selected_ordinals = ordinals[mask]
 
-        if anchor_input_seconds > 0 and not np.any(
-            np.isclose(source_points, anchor_input_seconds, atol=0.5 / sample_rate)
-        ):
-            source_points = np.append(source_points, anchor_input_seconds)
-            target_points = np.append(target_points, anchor_output)
+        # The manual/authoritative anchor replaces any automatic ordinal-zero
+        # observation. Keeping both would map two source times to one target.
+        nonzero = selected_ordinals != 0
+        selected_source = selected_source[nonzero]
+        selected_ordinals = selected_ordinals[nonzero]
+        selected_source = np.append(selected_source, anchor_input_seconds)
+        selected_ordinals = np.append(selected_ordinals, 0)
 
-        order = np.argsort(source_points)
-        source_points = source_points[order]
-        target_points = target_points[order]
+        target_for_selected = anchor_output + selected_ordinals.astype(np.float64) * (
+            60.0 / target_bpm
+        )
+        order = np.argsort(selected_source)
+        source_points = selected_source[order]
+        target_points = target_for_selected[order]
         keep = np.concatenate(([True], np.diff(source_points) > 0.5 / sample_rate))
         source_points = source_points[keep]
         target_points = target_points[keep]
@@ -188,7 +209,10 @@ def build_time_map(
             source_points[-1] = source_duration_seconds
             target_points[-1] = output_duration
 
-        if np.any(np.diff(target_points) <= 0):
+        positive = (source_points > 0) & (target_points > 0)
+        source_points = source_points[positive]
+        target_points = target_points[positive]
+        if source_points.size < 2 or np.any(np.diff(target_points) <= 0):
             continue
 
         prediction_sources = np.concatenate(([0.0], source_points))
@@ -218,6 +242,8 @@ def build_time_map(
     drift = selected.estimated_end_drift_ms
     source_deltas = np.diff(np.concatenate(([0.0], source_points)))
     target_deltas = np.diff(np.concatenate(([0.0], target_points)))
+    if np.any(target_deltas <= 0):
+        raise TempoStretchError("Time-map target landmarks must be strictly increasing")
     local_ratios = source_deltas / target_deltas
     minimum = float(np.min(local_ratios))
     maximum = float(np.max(local_ratios))
