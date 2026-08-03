@@ -19,7 +19,7 @@ description: 当用户要规划、初始化、实现或检查采用 Vue 3、Type
 2. **项目初始化**：创建 Vue 3 + FastAPI + PostgreSQL 的单仓库基础工程。
 3. **功能实现**：在符合该技术栈的项目中完成一个可验证的前后端业务功能。
 4. **架构检查**：检查项目是否偏离框架原则、存在不必要设施或缺少关键边界。
-5. **部署配置**：配置 Docker Compose、OpenResty、Cloudflare 或生产部署说明。
+5. **部署配置**：配置 Docker Compose、OpenResty、Cloudflare 或生产部署说明。涉及 GitHub Actions 镜像构建 / ghcr.io 发布时，先读取 [`references/github-actions-image-build.md`](references/github-actions-image-build.md)（含手动构建、版本号提取、版本清理与 1Panel env_file 踩坑）。
 
 若用户只要求其中一个模式，不要扩展到其他模式。
 
