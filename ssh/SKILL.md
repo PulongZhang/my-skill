@@ -1,5 +1,5 @@
 ---
-name: ssh-skill
+name: ssh
 version: 3.5.0
 description: "CRITICAL: Use this skill for ALL SSH/server operations. NEVER run raw ssh/scp directly. Triggers: SSH, remote server, server IP/hostname/user@host, connect/login, run command on server, check server/status, deploy, upload/download, file transfer, bastion/jump host, server-to-server transfer, migrate, tunnel, port forward, database/internal service access, and Chinese terms: 服务器, 远程, 连接, 登录, 上传, 下载, 部署, 跳板机, 服务器间传输, 迁移, 隧道, 端口转发, 数据库连接, 内网访问. Provides persistent connections, pooling, jump hosts, SFTP, tunneling, and recovery. DO NOT use for local commands, localhost, or current-directory work."
 allowed-tools: Bash, Read, Write, Glob
@@ -12,9 +12,9 @@ keywords: SSH,服务器,远程,连接,命令,上传,下载,文件传输,跳板�
 
 ## 快捷命令
 
-当用户通过 `/ssh-skill <参数>` 调用本 skill 时，根据参数执行对应操作：
+当用户通过 `/ssh <参数>` 调用本 skill 时，根据参数执行对应操作：
 
-### `/ssh-skill list`
+### `/ssh list`
 
 列出所有已配置的服务器。执行以下步骤：
 
@@ -33,11 +33,11 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_co
 | 1 | mgmt-01 | 管理服务器 | 管理,Warpgate | 丰台机房 | 密钥 | root |
 ```
 
-### `/ssh-skill find <关键词>`
+### `/ssh find <关键词>`
 
 查找匹配的服务器，格式同 list。
 
-### `/ssh-skill help`
+### `/ssh help`
 
 展示 SSH Skill 的帮助文档。以 Markdown 格式输出以下内容：
 
@@ -54,11 +54,11 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_co
 - 自动错误恢复：SSH 连接断开自动重连（最多 3 次）
 
 **快捷命令：**
-- `/ssh-skill list` - 列出所有已配置的服务器
-- `/ssh-skill find <关键词>` - 查找匹配的服务器
-- `/ssh-skill transfer <源> <源路径> <目标> <目标路径>` - 服务器间文件传输
-- `/ssh-skill tunnel <别名> <端口>` - 启动 SSH 隧道
-- `/ssh-skill help` - 显示此帮助信息
+- `/ssh list` - 列出所有已配置的服务器
+- `/ssh find <关键词>` - 查找匹配的服务器
+- `/ssh transfer <源> <源路径> <目标> <目标路径>` - 服务器间文件传输
+- `/ssh tunnel <别名> <端口>` - 启动 SSH 隧道
+- `/ssh help` - 显示此帮助信息
 
 **常用操作：**
 
@@ -125,7 +125,7 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_co
 
 **默认路径**：`~/.claude/skills/ssh/scripts`
 - `~` 会自动展开为用户家目录（Windows 和 Linux 通用）
-- Windows: `C:\Users\用户名\.claude\skills\ssh-skill\scripts`
+- Windows: `C:\Users\用户名\.claude\skills\ssh\scripts`
 - Linux: `/home/用户名/.claude/skills/ssh/scripts`
 
 **项目目录中的 skill**：如果 skill 放在项目的 `.claude/skills/ssh/` 中，使用相对路径：
@@ -156,7 +156,7 @@ ssh_execute.py 会自动检测守护进程：有则走长连接（~0.12s），�
 - 所有 SSH/SCP/Paramiko 连接都会严格验证 `~/.ssh/known_hosts` 与系统 Host Key。首次连接前，必须通过可信渠道核对并写入服务器指纹；不得使用跳过 Host Key 校验的选项。
 - 任意远程命令都会由目标 shell 解释，无法由本地黑名单可靠地判定安全性。因此所有 `ssh_execute.py` 和 `ssh_cluster.py` 执行请求都必须说明影响、目标别名和回滚方式，并在获得明确确认后追加 `--confirm`。
 - 批量执行前必须确认所有受影响主机。
-- 执行尝试会记录到本地审计日志（Windows：`%LOCALAPPDATA%\\ssh-skill\\audit.jsonl`；其他系统：`~/.local/state/ssh-skill/audit.jsonl`）。日志保存命令摘要，不保存原始命令或密码。
+- 执行尝试会记录到本地审计日志（Windows：`%LOCALAPPDATA%\\ssh-skill\\audit.jsonl`；其他系统：`~/.local/state/ssh/audit.jsonl`）。日志保存命令摘要，不保存原始命令或密码。
 - `deploy_pubkey.py` 修改远程 `authorized_keys`，也必须追加 `--confirm`。
 
 ### 新环境接入流程（首次登录）
