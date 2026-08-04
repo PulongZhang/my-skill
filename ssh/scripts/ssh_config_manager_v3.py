@@ -45,6 +45,14 @@ Host alias
       --tags web,nginx,production \\
       --location "阿里云华北"
 
+    # 密码认证创建（密码写入注释元数据）
+    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py create \\
+      --alias dev-server \\
+      --host 192.168.1.200 \\
+      --user root \\
+      --password "your-password" \\
+      --environment development
+
     # 删除配置
     uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py delete prod-web-01
 
@@ -286,7 +294,8 @@ class SSHConfigManager:
                    environment: str = "development",
                    description: str = "",
                    tags: Optional[List[str]] = None,
-                   location: str = "") -> bool:
+                   location: str = "",
+                   password: Optional[str] = None) -> bool:
         """
         创建新的 Host 配置（带注释元数据）
 
@@ -301,6 +310,7 @@ class SSHConfigManager:
             description: 描述
             tags: 标签列表
             location: 物理位置
+            password: 密码（存储在注释元数据中）
 
         Returns:
             是否成功创建
@@ -314,6 +324,7 @@ class SSHConfigManager:
         description = validate_ssh_config_value(description, 'description')
         environment = validate_ssh_config_value(environment, 'environment', single_token=True)
         location = validate_ssh_config_value(location, 'location')
+        password = validate_ssh_config_value(password, 'password')
         tags = [validate_ssh_config_value(tag, 'tag', single_token=True) for tag in (tags or [])]
         port = validate_port(port)
 
@@ -337,6 +348,9 @@ class SSHConfigManager:
 
         if location:
             comment_lines.append(f"# location: {location}\n")
+
+        if password:
+            comment_lines.append(f"# password: {password}\n")
 
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         comment_lines.append(f"# created_at: {now}\n")
@@ -921,7 +935,8 @@ def cmd_create(args):
             environment=args.environment,
             description=args.description or "",
             tags=args.tags or [],
-            location=args.location or ""
+            location=args.location or "",
+            password=args.password
         )
 
         if success:
@@ -1073,6 +1088,7 @@ def main():
     create_parser.add_argument('--host', required=True, help='主机地址')
     create_parser.add_argument('--user', required=True, help='用户名')
     create_parser.add_argument('--key', help='密钥文件路径')
+    create_parser.add_argument('--password', help='密码（存储在注释元数据中）')
     create_parser.add_argument('--port', type=int, default=22, help='端口号')
     create_parser.add_argument('--jump', help='跳板机别名')
     create_parser.add_argument('--environment', default='development', help='环境类型')

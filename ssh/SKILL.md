@@ -1,12 +1,12 @@
 ---
 name: ssh-skill
-version: 3.3.1
+version: 3.4.0
 description: "CRITICAL: Use this skill for ALL SSH/server operations. NEVER run raw ssh/scp directly. Triggers: SSH, remote server, server IP/hostname/user@host, connect/login, run command on server, check server/status, deploy, upload/download, file transfer, bastion/jump host, server-to-server transfer, migrate, tunnel, port forward, database/internal service access, and Chinese terms: 服务器, 远程, 连接, 登录, 上传, 下载, 部署, 跳板机, 服务器间传输, 迁移, 隧道, 端口转发, 数据库连接, 内网访问. Provides persistent connections, pooling, jump hosts, SFTP, tunneling, and recovery. DO NOT use for local commands, localhost, or current-directory work."
 allowed-tools: Bash, Read, Write, Glob
 keywords: SSH,服务器,远程,连接,命令,上传,下载,文件传输,跳板机,批量,集群,deploy,部署,运维,登录,执行,查看,检查,管理,操作,访问,传输,迁移,服务器间,tunnel,隧道,端口转发,数据库,内网
 ---
 
-# SSH Skill v3.3.1
+# SSH Skill v3.4.0
 
 高性能 SSH 操作技能，支持守护进程长连接、自动连接复用、跳板机、批量并发、服务器间直接传输、自动错误恢复。
 
@@ -41,7 +41,7 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_co
 
 展示 SSH Skill 的帮助文档。以 Markdown 格式输出以下内容：
 
-**SSH Skill v3.3.1 - 高性能 SSH 操作技能**
+**SSH Skill v3.4.0 - 高性能 SSH 操作技能**
 
 **核心特点：**
 - 守护进程长连接：首次连接后自动启动守护进程，后续命令响应时间从 ~0.45s 降至 ~0.12s
@@ -95,6 +95,13 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_co
    在所有服务器上执行 <命令>
    在生产环境服务器上执行 <命令>
    ```
+
+7. 接入新服务器（首次登录）：
+   ```
+   登录新服务器 <IP>，账号 <用户名>，密码/密钥...
+   把 <IP> 加进我的服务器列表
+   ```
+   按「新环境接入流程」执行：收集信息 → 核对主机指纹 → 创建配置 → 验证 → 密钥加固。
 
 **配置管理：**
 - 配置文件位置：`~/.ssh/config`
@@ -151,6 +158,103 @@ ssh_execute.py 会自动检测守护进程：有则走长连接（~0.12s），�
 - 批量执行前必须确认所有受影响主机。
 - 执行尝试会记录到本地审计日志（Windows：`%LOCALAPPDATA%\\ssh-skill\\audit.jsonl`；其他系统：`~/.local/state/ssh-skill/audit.jsonl`）。日志保存命令摘要，不保存原始命令或密码。
 - `deploy_pubkey.py` 修改远程 `authorized_keys`，也必须追加 `--confirm`。
+
+### 新环境接入流程（首次登录）
+
+用户请求登录**尚未配置**的新服务器（新 IP、新账号、或 `find` 找不到的别名）时，**必须**按以下流程逐步执行，不得跳过任何步骤：
+
+**步骤 1：收集信息**
+
+向用户确认以下信息，缺失时**提问，不得猜测或编造**：
+
+- 别名、IP/主机名、端口（默认 22）
+- 用户名、认证方式（密码 / 密钥文件路径）
+- 环境（production/development/staging）、描述、标签、位置（可选）
+- 跳板机别名（可选）
+
+先用 `find` 确认别名不存在，避免覆盖已有配置：
+
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" find "<关键词>"
+```
+
+**步骤 2：核对并记录主机指纹（必须，不可跳过）**
+
+所有连接都严格校验 Host Key，未记录指纹的新主机首次连接必然失败。获取服务器指纹（只读取，不写入任何文件）：
+
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/verify_host_key.py" <IP或主机名> --port <端口>
+```
+
+- 输出的 SHA256 指纹必须与**可信渠道**核对：云控制台、运维工单、同事确认等。
+- 核对一致（或用户明确确认指纹可信）后，追加 `--confirm` 记录到 `~/.ssh/known_hosts`：
+
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/verify_host_key.py" <IP或主机名> --port <端口> --confirm
+```
+
+- **禁止**使用跳过 Host Key 校验的选项；**禁止**未核对就写入指纹。
+
+**步骤 3：创建配置**
+
+```bash
+# 密钥认证
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" create \
+  --alias <别名> --host <IP> --user <用户名> --key <密钥文件> \
+  --environment <环境> --description "<描述>" --tags tag1 tag2 --location "<位置>"
+
+# 密码认证（密码写入注释元数据）
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" create \
+  --alias <别名> --host <IP> --user <用户名> --password "<密码>" \
+  --environment <环境> --description "<描述>"
+
+# 非 22 端口 / 跳板机（可选）
+... --port <端口>
+... --jump <跳板机别名>
+```
+
+**步骤 4：首次连接验证**
+
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_execute.py" <别名> "hostname && whoami && uname -a" --confirm
+```
+
+成功 = 指纹与认证均通过，接入完成。失败按下方「失败处理」回滚。
+
+**步骤 5：密钥加固（推荐；密码认证的新环境必做）**
+
+1. 确认本地有可用密钥对（没有则生成 `~/.ssh/id_ed25519` 及 `.pub`）。
+2. 部署公钥（需要密码认证可用）：
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/deploy_pubkey.py" <别名> --pubkey-file ~/.ssh/id_ed25519.pub --key-name <别名> --confirm
+```
+3. 迁移配置到密钥认证：
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/migrate_to_key_auth.py" <别名> --key-file id_ed25519
+```
+4. 再次执行步骤 4 验证。
+
+**步骤 6：采集系统信息（可选）**
+
+新环境建议记录规格并写入元数据：
+
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_execute.py" <别名> "cat /etc/os-release 2>/dev/null | grep PRETTY_NAME; nproc; grep MemTotal /proc/meminfo; df -h / | tail -1" --confirm
+```
+
+需要批量刷新所有服务器时运行 `update_server_info.py`。
+
+**失败处理（回滚）**
+
+- 指纹与可信渠道不一致 → **立即停止**，向用户报告，不得继续连接。
+- 创建或验证失败 → 删除配置：
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" delete <别名>
+```
+- 误写入的指纹 → 从 known_hosts 移除：
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/verify_host_key.py" --remove <IP或主机名> --port <端口>
+```
 
 ### 交互式远程终端
 
@@ -259,8 +363,11 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 # 查找服务器（支持别名和描述模糊查找）
 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" find "<关键词>"
 
-# 创建配置
+# 创建配置（密钥认证）
 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" create --alias <别名> --host <IP> --user <用户名> --key <密钥文件> --environment <环境>
+
+# 创建配置（密码认证，密码写入注释元数据）
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" create --alias <别名> --host <IP> --user <用户名> --password "<密码>" --environment <环境>
 
 # 更新配置（只更新提供的字段，其他字段保持不变）
 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" update <别名> --description "新描述" --tags tag1 tag2 tag3
@@ -494,6 +601,18 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" find "<关键词>"
 ```
 
+### 首次连接报错（Host key not found / Host key verification failed）
+
+新主机未记录指纹时首次连接必然失败。按「新环境接入流程」步骤 2 执行 `verify_host_key.py` 核对并记录指纹，再重试连接。
+
+### 别名不存在
+
+如果提示别名不存在，可通过配置管理工具查找：
+
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" find "<关键词>"
+```
+
 ## 强制规则
 
 - 所有 SSH 操作必须通过本 skill 的 Python 脚本
@@ -502,6 +621,8 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 - 不要用 `cd` 切换到脚本目录，直接用完整路径调用
 - 使用别名（alias）标识服务器，不再使用 JSON 配置文件路径
 - 对同一服务器的多个只读查询，优先合并为一次调用
+- 接入新服务器必须按「新环境接入流程」执行：先核对并记录主机指纹，再创建配置
+- 首次连接新主机前必须通过 `verify_host_key.py` 核对指纹，禁止跳过 Host Key 校验
 
 ## 依赖
 
