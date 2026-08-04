@@ -490,7 +490,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ssh"
+name = "sshops"
 version = "3.3.1"
 source = { virtual = "." }
 dependencies = [

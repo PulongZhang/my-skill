@@ -54,7 +54,7 @@ description: Use when handling the example workflow.
 - `gif-generator`
 - `meeting-minutes-docx`
 - `running-song-maker`
-- `ssh`
+- `sshops`
 
 ### 日常命令
 

@@ -8,13 +8,13 @@
 
 用法：
     # 获取服务器指纹（只读取，不写入任何文件）
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/verify_host_key.py <IP或主机名> [--port <端口>]
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/verify_host_key.py <IP或主机名> [--port <端口>]
 
     # 与可信渠道核对指纹一致后，记录到 ~/.ssh/known_hosts
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/verify_host_key.py <IP或主机名> --port <端口> --confirm
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/verify_host_key.py <IP或主机名> --port <端口> --confirm
 
     # 从 known_hosts 移除某主机（回滚 / 更换主机时）
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/verify_host_key.py --remove <IP或主机名> [--port <端口>]
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/verify_host_key.py --remove <IP或主机名> [--port <端口>]
 """
 
 import argparse

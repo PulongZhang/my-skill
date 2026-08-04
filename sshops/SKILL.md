@@ -1,5 +1,5 @@
 ---
-name: ssh
+name: sshops
 version: 3.5.0
 description: "CRITICAL: Use this skill for ALL SSH/server operations. NEVER run raw ssh/scp directly. Triggers: SSH, remote server, server IP/hostname/user@host, connect/login, run command on server, check server/status, deploy, upload/download, file transfer, bastion/jump host, server-to-server transfer, migrate, tunnel, port forward, database/internal service access, and Chinese terms: 服务器, 远程, 连接, 登录, 上传, 下载, 部署, 跳板机, 服务器间传输, 迁移, 隧道, 端口转发, 数据库连接, 内网访问. Provides persistent connections, pooling, jump hosts, SFTP, tunneling, and recovery. DO NOT use for local commands, localhost, or current-directory work."
 allowed-tools: Bash, Read, Write, Glob
@@ -12,15 +12,15 @@ keywords: SSH,服务器,远程,连接,命令,上传,下载,文件传输,跳板�
 
 ## 快捷命令
 
-当用户通过 `/ssh <参数>` 调用本 skill 时，根据参数执行对应操作：
+当用户通过 `/sshops <参数>` 调用本 skill 时，根据参数执行对应操作：
 
-### `/ssh list`
+### `/sshops list`
 
 列出所有已配置的服务器。执行以下步骤：
 
 1. 运行命令获取数据：
 ```bash
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py list-servers
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py list-servers
 ```
 2. 解析返回的 JSON 数据
 3. 以 **Markdown 表格** 格式展示，列：序号、别名、备注(description)、标签(tags)、位置(location)、认证方式(auth)、用户名(user)
@@ -33,11 +33,11 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_co
 | 1 | mgmt-01 | 管理服务器 | 管理,Warpgate | 丰台机房 | 密钥 | root |
 ```
 
-### `/ssh find <关键词>`
+### `/sshops find <关键词>`
 
 查找匹配的服务器，格式同 list。
 
-### `/ssh help`
+### `/sshops help`
 
 展示 SSH Skill 的帮助文档。以 Markdown 格式输出以下内容：
 
@@ -54,11 +54,11 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_co
 - 自动错误恢复：SSH 连接断开自动重连（最多 3 次）
 
 **快捷命令：**
-- `/ssh list` - 列出所有已配置的服务器
-- `/ssh find <关键词>` - 查找匹配的服务器
-- `/ssh transfer <源> <源路径> <目标> <目标路径>` - 服务器间文件传输
-- `/ssh tunnel <别名> <端口>` - 启动 SSH 隧道
-- `/ssh help` - 显示此帮助信息
+- `/sshops list` - 列出所有已配置的服务器
+- `/sshops find <关键词>` - 查找匹配的服务器
+- `/sshops transfer <源> <源路径> <目标> <目标路径>` - 服务器间文件传输
+- `/sshops tunnel <别名> <端口>` - 启动 SSH 隧道
+- `/sshops help` - 显示此帮助信息
 
 **常用操作：**
 
@@ -123,28 +123,28 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_co
 
 ### 路径说明
 
-**默认路径**：`~/.claude/skills/ssh/scripts`
+**默认路径**：`~/.claude/skills/sshops/scripts`
 - `~` 会自动展开为用户家目录（Windows 和 Linux 通用）
-- Windows: `C:\Users\用户名\.claude\skills\ssh\scripts`
-- Linux: `/home/用户名/.claude/skills/ssh/scripts`
+- Windows: `C:\Users\用户名\.claude\skills\sshops\scripts`
+- Linux: `/home/用户名/.claude/skills/sshops/scripts`
 
-**项目目录中的 skill**：如果 skill 放在项目的 `.claude/skills/ssh/` 中，使用相对路径：
+**项目目录中的 skill**：如果 skill 放在项目的 `.claude/skills/sshops/` 中，使用相对路径：
 ```
-.claude/skills/ssh/scripts
+.claude/skills/sshops/scripts
 ```
 
 **路径自动识别**：Python 的 `os.path.expanduser()` 会自动处理 `~`，无需手动替换。
 
 ### 调用格式（唯一正确方式）
 
-**MUST**: 使用 `uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/脚本名.py` 格式。使用别名（alias）标识服务器。
+**MUST**: 使用 `uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/脚本名.py` 格式。使用别名（alias）标识服务器。
 
 **NEVER**: 不要使用 `cd` 到脚本目录再执行，不要使用反斜杠 `\`，不要直接写 `ssh` 或 `scp` 命令。
 
 ### 执行远程命令
 
 ```bash
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py <别名> "<命令>" --confirm
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_execute.py <别名> "<命令>" --confirm
 ```
 
 可选参数：`--timeout <秒>` `--no-daemon` `--confirm`
@@ -156,7 +156,7 @@ ssh_execute.py 会自动检测守护进程：有则走长连接（~0.12s），�
 - 所有 SSH/SCP/Paramiko 连接都会严格验证 `~/.ssh/known_hosts` 与系统 Host Key。首次连接前，必须通过可信渠道核对并写入服务器指纹；不得使用跳过 Host Key 校验的选项。
 - 任意远程命令都会由目标 shell 解释，无法由本地黑名单可靠地判定安全性。因此所有 `ssh_execute.py` 和 `ssh_cluster.py` 执行请求都必须说明影响、目标别名和回滚方式，并在获得明确确认后追加 `--confirm`。
 - 批量执行前必须确认所有受影响主机。
-- 执行尝试会记录到本地审计日志（Windows：`%LOCALAPPDATA%\\ssh-skill\\audit.jsonl`；其他系统：`~/.local/state/ssh/audit.jsonl`）。日志保存命令摘要，不保存原始命令或密码。
+- 执行尝试会记录到本地审计日志（Windows：`%LOCALAPPDATA%\\sshops\\audit.jsonl`；其他系统：`~/.local/state/sshops/audit.jsonl`）。日志保存命令摘要，不保存原始命令或密码。
 - `deploy_pubkey.py` 修改远程 `authorized_keys`，也必须追加 `--confirm`。
 
 ### 新环境接入流程（首次登录）
@@ -175,7 +175,7 @@ ssh_execute.py 会自动检测守护进程：有则走长连接（~0.12s），�
 先用 `find` 确认别名不存在，避免覆盖已有配置：
 
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" find "<关键词>"
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" find "<关键词>"
 ```
 
 **步骤 2：核对并记录主机指纹（必须，不可跳过）**
@@ -183,14 +183,14 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 所有连接都严格校验 Host Key，未记录指纹的新主机首次连接必然失败。获取服务器指纹（只读取，不写入任何文件）：
 
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/verify_host_key.py" <IP或主机名> --port <端口>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/verify_host_key.py" <IP或主机名> --port <端口>
 ```
 
 - 输出的 SHA256 指纹必须与**可信渠道**核对：云控制台、运维工单、同事确认等。
 - 核对一致（或用户明确确认指纹可信）后，追加 `--confirm` 记录到 `~/.ssh/known_hosts`：
 
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/verify_host_key.py" <IP或主机名> --port <端口> --confirm
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/verify_host_key.py" <IP或主机名> --port <端口> --confirm
 ```
 
 - **禁止**使用跳过 Host Key 校验的选项；**禁止**未核对就写入指纹。
@@ -199,12 +199,12 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ver
 
 ```bash
 # 密钥认证
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" create \
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" create \
   --alias <别名> --host <IP> --user <用户名> --key <密钥文件> \
   --environment <环境> --description "<描述>" --tags tag1 tag2 --location "<位置>"
 
 # 密码认证（密码写入注释元数据）
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" create \
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" create \
   --alias <别名> --host <IP> --user <用户名> --password "<密码>" \
   --environment <环境> --description "<描述>"
 
@@ -216,7 +216,7 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 **步骤 4：首次连接验证**
 
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_execute.py" <别名> "hostname && whoami && uname -a" --confirm
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_execute.py" <别名> "hostname && whoami && uname -a" --confirm
 ```
 
 成功 = 指纹与认证均通过，接入完成。失败按下方「失败处理」回滚。
@@ -228,16 +228,16 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 1. 确认本地有可用密钥对（没有则生成 `~/.ssh/id_ed25519` 及 `.pub`）。
 2. 部署公钥（需要密码认证可用）：
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/deploy_pubkey.py" <别名> --pubkey-file ~/.ssh/id_ed25519.pub --key-name <别名> --confirm
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/deploy_pubkey.py" <别名> --pubkey-file ~/.ssh/id_ed25519.pub --key-name <别名> --confirm
 ```
 3. 配置加入密钥并**保留 password 字段**（双认证模式）：
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" update <别名> --key ~/.ssh/id_ed25519
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" update <别名> --key ~/.ssh/id_ed25519
 ```
    双模式下脚本实际走密码认证（Paramiko 优先密码），密钥处于待命状态；`list-servers` 认证方式显示「密码+密钥」。
 4. 仅当用户**明确要求纯密钥登录**时，才执行迁移（移除密码字段）：
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/migrate_to_key_auth.py" <别名> --key-file id_ed25519
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/migrate_to_key_auth.py" <别名> --key-file id_ed25519
 ```
 5. 再次执行步骤 4 验证。
 
@@ -246,7 +246,7 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/mig
 新环境建议记录规格并写入元数据：
 
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_execute.py" <别名> "cat /etc/os-release 2>/dev/null | grep PRETTY_NAME; nproc; grep MemTotal /proc/meminfo; df -h / | tail -1" --confirm
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_execute.py" <别名> "cat /etc/os-release 2>/dev/null | grep PRETTY_NAME; nproc; grep MemTotal /proc/meminfo; df -h / | tail -1" --confirm
 ```
 
 需要批量刷新所有服务器时运行 `update_server_info.py`。
@@ -256,11 +256,11 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 - 指纹与可信渠道不一致 → **立即停止**，向用户报告，不得继续连接。
 - 创建或验证失败 → 删除配置：
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" delete <别名>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" delete <别名>
 ```
 - 误写入的指纹 → 从 known_hosts 移除：
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/verify_host_key.py" --remove <IP或主机名> --port <端口>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/verify_host_key.py" --remove <IP或主机名> --port <端口>
 ```
 
 ### 交互式远程终端
@@ -268,13 +268,13 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ver
 需要持续输出、全屏终端或实时键盘输入时，使用独立的交互式终端脚本：
 
 ```bash
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_interactive.py <别名> --confirm
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_interactive.py <别名> --confirm
 ```
 
 可在连接后自动执行一个初始命令：
 
 ```bash
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_interactive.py <别名> \
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_interactive.py <别名> \
   --command "docker exec -it <容器> /bin/bash" \
   --confirm
 ```
@@ -282,7 +282,7 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_in
 Arthas `watch` 等持续等待方法调用的场景应使用交互式终端；会话默认不设整体超时。按 `Ctrl+C` 停止 `watch`，再输入 `exit` 关闭远程 shell。若需要强制限制会话时长，可指定：
 
 ```bash
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_interactive.py <别名> \
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_interactive.py <别名> \
   --command "docker exec -it <容器> /bin/bash" \
   --timeout 1800 \
   --confirm
@@ -293,7 +293,7 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_in
 ### 上传文件
 
 ```bash
-MSYS_NO_PATHCONV=1 uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_upload.py <别名> "<本地路径>" "<远程路径>"
+MSYS_NO_PATHCONV=1 uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_upload.py <别名> "<本地路径>" "<远程路径>"
 ```
 
 可选参数：`--resume`（断点续传） `--recursive`（目录递归上传） `--no-progress`（禁用进度输出）
@@ -301,7 +301,7 @@ MSYS_NO_PATHCONV=1 uv run --project ~/.claude/skills/ssh python ~/.claude/skills
 ### 下载文件
 
 ```bash
-MSYS_NO_PATHCONV=1 uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_download.py <别名> "<远程路径>" "<本地路径>"
+MSYS_NO_PATHCONV=1 uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_download.py <别名> "<远程路径>" "<本地路径>"
 ```
 
 可选参数：`--resume`（断点续传） `--recursive`（目录递归下载） `--no-progress`（禁用进度输出）
@@ -312,19 +312,19 @@ MSYS_NO_PATHCONV=1 uv run --project ~/.claude/skills/ssh python ~/.claude/skills
 
 ```bash
 # 自动模式（推荐）- 根据文件大小和网络环境自动选择最优方式
-MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_server_transfer.py" <源别名> "<源路径>" <目标别名> "<目标路径>"
+MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_server_transfer.py" <源别名> "<源路径>" <目标别名> "<目标路径>"
 
 # 强制直连模式（大文件推荐，数据直接在服务器间传输）
-MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_server_transfer.py" <源别名> "<源路径>" <目标别名> "<目标路径>" --mode direct
+MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_server_transfer.py" <源别名> "<源路径>" <目标别名> "<目标路径>" --mode direct
 
 # 强制流式转发（小文件或服务器间网络不通时）
-MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_server_transfer.py" <源别名> "<源路径>" <目标别名> "<目标路径>" --mode stream
+MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_server_transfer.py" <源别名> "<源路径>" <目标别名> "<目标路径>" --mode stream
 
 # 混合模式（先尝试直连，失败后自动降级到流式）
-MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_server_transfer.py" <源别名> "<源路径>" <目标别名> "<目标路径>" --mode hybrid
+MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_server_transfer.py" <源别名> "<源路径>" <目标别名> "<目标路径>" --mode hybrid
 
 # 使用 rsync（仅直连模式，支持增量同步）
-MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_server_transfer.py" <源别名> "<源路径>" <目标别名> "<目标路径>" --use-rsync
+MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_server_transfer.py" <源别名> "<源路径>" <目标别名> "<目标路径>" --use-rsync
 ```
 
 可选参数：`--mode <auto|direct|stream|hybrid>`（传输模式） `--use-rsync`（使用 rsync） `--no-progress`（禁用进度） `--size-threshold <MB>`（大小阈值，默认 10） `--timeout <秒>`（超时，默认 300）
@@ -344,16 +344,16 @@ MSYS_NO_PATHCONV=1 uv run --project "~/.claude/skills/ssh" python "~/.claude/ski
 
 ```bash
 # 对所有服务器执行
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_cluster.py" "<命令>" --parallel --confirm
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_cluster.py" "<命令>" --parallel --confirm
 
 # 对指定别名列表执行
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_cluster.py" "<命令>" --hosts "DEV-002,DEV-003" --parallel --confirm
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_cluster.py" "<命令>" --hosts "DEV-002,DEV-003" --parallel --confirm
 
 # 按环境过滤
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_cluster.py" "<命令>" --environment production --parallel --confirm
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_cluster.py" "<命令>" --environment production --parallel --confirm
 
 # 按标签过滤
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_cluster.py" "<命令>" --tags "web,nginx" --parallel --confirm
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_cluster.py" "<命令>" --tags "web,nginx" --parallel --confirm
 ```
 
 可选参数：`--timeout <秒>` `--health-check` `--max-workers <数量>`
@@ -362,27 +362,27 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 
 ```bash
 # 列出所有服务器
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" list-servers
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" list-servers
 
 # 按环境过滤
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" list-servers --environment production
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" list-servers --environment production
 
 # 查找服务器（支持别名和描述模糊查找）
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" find "<关键词>"
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" find "<关键词>"
 
 # 创建配置（密钥认证）
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" create --alias <别名> --host <IP> --user <用户名> --key <密钥文件> --environment <环境>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" create --alias <别名> --host <IP> --user <用户名> --key <密钥文件> --environment <环境>
 
 # 创建配置（密码认证，密码写入注释元数据）
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" create --alias <别名> --host <IP> --user <用户名> --password "<密码>" --environment <环境>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" create --alias <别名> --host <IP> --user <用户名> --password "<密码>" --environment <环境>
 
 # 更新配置（只更新提供的字段，其他字段保持不变）
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" update <别名> --description "新描述" --tags tag1 tag2 tag3
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" update <别名> --environment production --location "新位置"
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" update <别名> --host <新IP> --port <新端口>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" update <别名> --description "新描述" --tags tag1 tag2 tag3
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" update <别名> --environment production --location "新位置"
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" update <别名> --host <新IP> --port <新端口>
 
 # 删除配置
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" delete <别名>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" delete <别名>
 ```
 
 ### SSH Tunnel（端口转发）
@@ -391,25 +391,25 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 
 ```bash
 # 启动 tunnel（自动分配本地端口）
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_tunnel.py" start <别名> --remote-port <端口>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_tunnel.py" start <别名> --remote-port <端口>
 
 # 指定本地端口
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_tunnel.py" start <别名> --local-port <本地端口> --remote-port <远程端口>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_tunnel.py" start <别名> --local-port <本地端口> --remote-port <远程端口>
 
 # 转发到远程的其他主机
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_tunnel.py" start <别名> --remote-host <远程主机> --remote-port <端口>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_tunnel.py" start <别名> --remote-host <远程主机> --remote-port <端口>
 
 # 列出所有活动的 tunnel
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_tunnel.py" list
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_tunnel.py" list
 
 # 查看 tunnel 状态
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_tunnel.py" status <tunnel-id>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_tunnel.py" status <tunnel-id>
 
 # 停止 tunnel
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_tunnel.py" stop <tunnel-id>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_tunnel.py" stop <tunnel-id>
 
 # 停止服务器的所有 tunnel
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_tunnel.py" stop-all <别名>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_tunnel.py" stop-all <别名>
 ```
 
 **使用场景**：
@@ -428,14 +428,14 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 **示例**：
 ```bash
 # 连接远程 MySQL
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_tunnel.py start prod-db-01 --remote-port 3306
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_tunnel.py start prod-db-01 --remote-port 3306
 # 返回：本地端口 10001
 
 # 使用 tunnel 连接数据库
 mysql -h 127.0.0.1 -P 10001 -u root -p
 
 # 访问内部 Web 服务
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_tunnel.py start prod-web-01 --remote-port 8080
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_tunnel.py start prod-web-01 --remote-port 8080
 # 然后在浏览器访问 http://127.0.0.1:10002
 ```
 
@@ -536,13 +536,13 @@ ssh_execute.py 首次调用时会自动启动守护进程，无需手动操作�
 
 ```bash
 # 启动守护进程（通常不需要手动启动）
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_daemon.py" start <别名>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_daemon.py" start <别名>
 
 # 查看守护进程状态
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_daemon.py" status <别名>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_daemon.py" status <别名>
 
 # 停止守护进程
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_daemon.py" stop <别名>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_daemon.py" stop <别名>
 ```
 
 可选参数：`--idle-timeout <秒>`（默认 1800，即 30 分钟）
@@ -570,13 +570,13 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 
 ```bash
 # 好：一次调用获取多个信息
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py DEV-002 "hostname && uptime && df -h && free -m" --confirm
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_execute.py DEV-002 "hostname && uptime && df -h && free -m" --confirm
 
 # 差：多次调用分别获取
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py DEV-002 "hostname" --confirm
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py DEV-002 "uptime" --confirm
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py DEV-002 "df -h" --confirm
-uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_execute.py DEV-002 "free -m" --confirm
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_execute.py DEV-002 "hostname" --confirm
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_execute.py DEV-002 "uptime" --confirm
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_execute.py DEV-002 "df -h" --confirm
+uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_execute.py DEV-002 "free -m" --confirm
 ```
 
 ### 何时合并，何时分开
@@ -610,13 +610,13 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_ex
 如果守护进程异常，可手动停止后重试：
 
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_daemon.py" stop <别名>
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_daemon.py" stop <别名>
 ```
 
 或使用 `--no-daemon` 参数跳过守护进程直连：
 
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_execute.py" <别名> "<命令>" --no-daemon --confirm
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_execute.py" <别名> "<命令>" --no-daemon --confirm
 ```
 
 ### 别名不存在
@@ -624,7 +624,7 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 如果提示别名不存在，可通过配置管理工具查找：
 
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" find "<关键词>"
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" find "<关键词>"
 ```
 
 ### 首次连接报错（Host key not found / Host key verification failed）
@@ -636,7 +636,7 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 如果提示别名不存在，可通过配置管理工具查找：
 
 ```bash
-uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" find "<关键词>"
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" find "<关键词>"
 ```
 
 ## 强制规则
@@ -654,5 +654,5 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 ## 依赖
 
 - Python 3.9+
-- 使用 `uv run --project ~/.claude/skills/ssh python ...` 自动创建并复用受 `uv.lock` 约束的环境
+- 使用 `uv run --project ~/.claude/skills/sshops python ...` 自动创建并复用受 `uv.lock` 约束的环境
 - paramiko（SSH 连接和文件传输）由 `pyproject.toml` 声明；仅更新依赖时执行 `uv sync`

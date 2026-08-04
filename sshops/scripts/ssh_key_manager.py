@@ -12,19 +12,19 @@ SSH 密钥管理工具 v1.0
 
 用法：
     # 单台服务器添加密钥
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_key_manager.py add --host esxi-01 --key ~/.ssh/id_ed25519.pub
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_key_manager.py add --host esxi-01 --key ~/.ssh/id_ed25519.pub
 
     # 批量添加
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_key_manager.py add --hosts "esxi-01,mgmt-01,dev-001" --key ~/.ssh/id_ed25519.pub
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_key_manager.py add --hosts "esxi-01,mgmt-01,dev-001" --key ~/.ssh/id_ed25519.pub
 
     # 所有服务器
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_key_manager.py add --all --key ~/.ssh/id_ed25519.pub
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_key_manager.py add --all --key ~/.ssh/id_ed25519.pub
 
     # 验证密钥
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_key_manager.py verify --host esxi-01 --key ~/.ssh/id_ed25519.pub
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_key_manager.py verify --host esxi-01 --key ~/.ssh/id_ed25519.pub
 
     # 回滚操作
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_key_manager.py rollback --host esxi-01
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_key_manager.py rollback --host esxi-01
 
 作者：张阳 (zhangyang@bjued.cn)
 日期：2026-03-04
@@ -673,19 +673,19 @@ def main():
         epilog="""
 示例:
   # 单台服务器添加密钥
-  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_key_manager.py add --host esxi-01 --key ~/.ssh/id_ed25519.pub
+  uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_key_manager.py add --host esxi-01 --key ~/.ssh/id_ed25519.pub
 
   # 批量添加
-  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_key_manager.py add --hosts "esxi-01,mgmt-01,dev-001" --key ~/.ssh/id_ed25519.pub
+  uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_key_manager.py add --hosts "esxi-01,mgmt-01,dev-001" --key ~/.ssh/id_ed25519.pub
 
   # 所有服务器
-  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_key_manager.py add --all --key ~/.ssh/id_ed25519.pub
+  uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_key_manager.py add --all --key ~/.ssh/id_ed25519.pub
 
   # 验证密钥
-  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_key_manager.py verify --host esxi-01 --key ~/.ssh/id_ed25519.pub
+  uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_key_manager.py verify --host esxi-01 --key ~/.ssh/id_ed25519.pub
 
   # 回滚操作
-  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_key_manager.py rollback --host esxi-01
+  uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_key_manager.py rollback --host esxi-01
         """
     )
 

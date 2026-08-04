@@ -26,16 +26,16 @@ Host alias
 
 用法：
     # 列出所有服务器
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py list-servers
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py list-servers
 
     # 按环境过滤
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py list-servers --environment production
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py list-servers --environment production
 
     # 查找服务器
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py find "web"
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py find "web"
 
     # 创建配置
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py create \\
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py create \\
       --alias prod-web-01 \\
       --host 192.168.1.100 \\
       --user root \\
@@ -46,7 +46,7 @@ Host alias
       --location "阿里云华北"
 
     # 密码认证创建（密码写入注释元数据）
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py create \\
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py create \\
       --alias dev-server \\
       --host 192.168.1.200 \\
       --user root \\
@@ -54,10 +54,10 @@ Host alias
       --environment development
 
     # 删除配置
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py delete prod-web-01
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py delete prod-web-01
 
     # 导出配置
-    uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py export --output backup.json
+    uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py export --output backup.json
 """
 
 import sys

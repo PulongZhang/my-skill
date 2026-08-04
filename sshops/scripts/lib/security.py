@@ -77,9 +77,9 @@ def is_dangerous_command(command):
 def audit_command(alias, command, *, execution, confirmed, outcome=None):
     """Append non-secret command metadata to an owner-readable local audit file."""
     if os.name == "nt":
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ssh-skill"
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "sshops"
     else:
-        base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "ssh-skill"
+        base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "sshops"
     base.mkdir(parents=True, exist_ok=True)
     if os.name != "nt":
         os.chmod(base, stat.S_IRWXU)

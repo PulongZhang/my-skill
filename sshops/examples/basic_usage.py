@@ -2,14 +2,14 @@
 SSH Skill 基本用法（可运行）
 
 说明：
-- 这是一个“回归用例”脚本：用本目录的示例配置调用 ssh 的 CLI 入口。
+- 这是一个“回归用例”脚本：用本目录的示例配置调用 sshops 的 CLI 入口。
 - 运行前请先把示例配置中的占位符替换为你的真实信息（不要提交到仓库）。
 
 用法：
-  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/examples/basic_usage.py [config_json] [command]
+  uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/examples/basic_usage.py [config_json] [command]
 
 示例：
-  uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/examples/basic_usage.py ./config_single_key.json "whoami && hostname"
+  uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/examples/basic_usage.py ./config_single_key.json "whoami && hostname"
 """
 
 from __future__ import annotations
