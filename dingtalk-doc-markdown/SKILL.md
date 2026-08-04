@@ -1,13 +1,13 @@
 ---
 name: dingtalk-doc-markdown
-description: 当需要从浏览器页面把 DingTalk Docs、DingTalk Wiki 或钉钉文档导出为 Markdown 时使用，尤其适用于包含 wiki-doc-iframe、article.body-editor-content、layout_body、data-type 块、表格、卡片、标题、下载或 Markdown 日志的浏览器控制台/书签脚本场景。
+description: 当 AI 需要读取或理解钉钉文档（DingTalk Docs、DingTalk Wiki、钉钉文档）内容——如总结、回答、提取、改写文档内容——时使用。通过在浏览器控制台把页面正文转换为 Markdown 供 AI 阅读，下载 .md 文件只是顺带行为。适用于包含 wiki-doc-iframe、article.body-editor-content、layout_body、data-type 块、表格、卡片、标题的浏览器控制台/书签脚本场景。
 ---
 
-# 钉钉文档 Markdown 导出
+# 钉钉文档 Markdown 读取
 
 ## 概述
 
-使用这个技能，通过浏览器端 JavaScript 将钉钉文档页面导出为可读 Markdown。除非用户明确要求其他集成方式，否则保持 DOM 读取方案：脚本在已加载的文档页面中运行，必要时滚动钉钉文档容器，读取编辑器块，转换标题、段落、表格和卡片，下载 `.md` 文件，并在控制台输出结果。
+使用这个技能，让 AI 能读到钉钉文档的内容。脚本在已加载的文档页面中运行，必要时滚动钉钉文档容器，读取编辑器块，把标题、段落、表格和卡片转换为 Markdown 输出到控制台，供 AI 阅读；下载 `.md` 文件只是顺带行为（供用户留档），不是主要目的。除非用户明确要求其他集成方式，否则保持 DOM 读取方案。
 
 ## 快速开始
 
@@ -15,7 +15,7 @@ description: 当需要从浏览器页面把 DingTalk Docs、DingTalk Wiki 或钉
 2. 等待正文内容完全加载并可见。
 3. 打开浏览器 DevTools Console。
 4. 将 `scripts/export-dingtalk-doc-markdown.js` 复制到控制台并运行。
-5. 检查下载的 `.md` 文件和控制台输出。
+5. 从控制台读取 Markdown 内容（这是 AI 阅读文档的主要途径）；下载的 `.md` 文件只是顺带产物。
 
 如果用户需要书签脚本，将同一份脚本压缩成 `javascript:(()=>{...})()` 形式即可。除非用户明确要求，不要编造远程服务、API 接口、浏览器扩展或登录流程。
 
@@ -23,7 +23,7 @@ description: 当需要从浏览器页面把 DingTalk Docs、DingTalk Wiki 或钉
 
 | 需求 | 做法 |
 | --- | --- |
-| 导出当前钉钉文档 | 在 DevTools Console 运行 `scripts/export-dingtalk-doc-markdown.js` |
+| 读取当前钉钉文档内容 | 在 DevTools Console 运行 `scripts/export-dingtalk-doc-markdown.js`，从控制台读取 Markdown |
 | 读取 iframe 内容 | 脚本先读取 `#wiki-doc-iframe`，再回退到当前 `document` |
 | 定位正文区域 | 优先使用 `article.body-editor-content`，回退到 `#layout_body` |
 | 采集虚拟滚动内容 | 滚动 `#layout_body` 并收集每个已渲染切片 |
@@ -66,4 +66,4 @@ description: 当需要从浏览器页面把 DingTalk Docs、DingTalk Wiki 或钉
 - 跳过表格内部的嵌套子块，避免表格内容重复输出。
 - 滚动 `#layout_body` 时保留编号标题文本，并在结束后恢复原滚动位置。
 - 使用 `Blob` 和 `URL.createObjectURL` 触发本地下载。
-- 同时输出文件名和 Markdown，方便在下载失败时从控制台复制。
+- 同时输出文件名和 Markdown：控制台输出是让 AI 读到内容的途径，下载 `.md` 文件只是顺带。
