@@ -1,5 +1,5 @@
 [project]
-name = "ssh-skill"
+name = "ssh"
 version = "3.3.1"
 description = "SSH command, transfer, tunnel, and configuration utilities"
 requires-python = ">=3.9"
