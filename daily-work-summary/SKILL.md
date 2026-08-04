@@ -1,6 +1,6 @@
 ---
 name: daily-work-summary
-description: Use when the user asks for a Chinese daily work summary, work log, day-end review, objective workplace recap, diligent time note, or a summary generated from daily Git commits. Supports extracting Git commit records with daily_git_commits.py and appending diligent time from calculate_diligent_time.py while keeping strict objective Chinese prose.
+description: Use when the user asks for a Chinese daily work summary, work log, day-end review, objective workplace recap, diligent time note, or a summary based on daily Git commits and local Claude Code conversations. Supports extracting Git records with daily_git_commits.py, extracting persisted JSONL conversations with daily_claude_conversations.py, and appending diligent time with calculate_diligent_time.py while keeping strict objective Chinese prose.
 ---
 
 # Daily Work Summary
@@ -13,7 +13,7 @@ When requirements conflict, use the user's confirmed口径: write limited contex
 
 ## Git Commit Source
 
-When the user asks to generate a daily summary from Git commits, use the bundled script `scripts/daily_git_commits.py` as the source extractor before writing the final summary.
+For a normal daily summary, use both the bundled Git extractor `scripts/daily_git_commits.py` and the local Claude conversation extractor `scripts/daily_claude_conversations.py` by default before writing the final summary. If the user explicitly requests Git or commit records only, use Git-only mode and skip the conversation extractor.
 
 Typical commands:
 
@@ -26,11 +26,34 @@ uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/dai
 
 Use script output as raw work material only. Do not paste the generated Git report as the final answer, and do not state or imply in the final summary that the content was generated from Git commits or extracted from commit records. Convert commit subjects, commit bodies, changed files, repositories, and diff stats into the required objective Chinese daily summary.
 
-If the script finds no commits, say that no matching Git commit records were found for the selected date range, then ask the user to provide additional work content. Override `--author`, `--date`, `--since`, `--until`, or `--roots` from the user request instead of editing the script.
+If the script finds no commits, treat Git as having no matching facts for the selected range. In Git-only mode, say that no matching Git commit records were found and ask the user to provide additional work content. In combined or conversation mode, continue using usable conversation facts instead of stopping only because Git is empty. Override `--author`, `--date`, `--since`, `--until`, or `--roots` from the user request instead of editing the script.
+
+## Claude Code Conversation Source
+
+As part of the default combined mode, run the bundled local extractor together with the Git extractor. Also use it when the user explicitly asks to include Claude Code conversation history or asks for work that may not have Git commits. Skip it only in explicit Git-only mode. It reads persisted JSONL files only and never calls a remote Claude API.
+
+Typical commands:
+
+```bash
+uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_claude_conversations.py --date 2026-04-13 --json
+uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_claude_conversations.py --since 2026-04-01 --until 2026-04-13 --project my-skill --roots D:\CETWorkSpace --json
+uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/daily_claude_conversations.py --dir D:\Users\example\.claude\projects --roots D:\CETWorkSpace --date 2026-04-13 --json
+```
+
+The extractor searches `--dir` first, then `CLAUDE_CONFIG_DIR/projects`, then `~/.claude/projects`. These are transcript storage locations, not project scan roots. The project scope defaults to the same `D:\CETWorkSpace` root used by the Git extractor and can be overridden with `--roots`; records are selected by the transcript `cwd` field. It streams `.jsonl` files recursively, converts timestamps to the local date, skips malformed lines, and emits structured events for user messages and assistant text. Tool-use records and complete tool results are not emitted as work details. Thinking blocks, system reminders, and unknown inputs are skipped, and sensitive values in retained text are redacted.
+
+Treat the conversation output as raw facts, not as a ready-made summary. Apply these evidence rules:
+
+- A user request, proposal, or assistant plan without an observed operation or result means discussion, analysis, or pending work; never rewrite it as completed work. A user's explicit factual statement that a task was completed may be recorded as a user-provided fact.
+- Assistant-generated text alone is context, not completion evidence. Pair it with an explicit user fact or a Git change before describing handled work; an assistant claim that a file or test was handled is not by itself proof of completion.
+- A Git commit and its file or diff evidence are stronger delivery evidence. When conversation activity and a commit describe the same topic, merge them into one work theme instead of repeating them.
+- Mark unresolved questions, blocked items, unfinished changes, and follow-up checks as constraints or pending items. Do not turn them into completed items.
+- Use Git-only mode when the user explicitly asks for Git or commit records only. Otherwise use conversation mode when only conversation facts exist and combined mode when both sources contain facts. If the local history directory is missing, unreadable, incompatible, or empty, continue with the user's content and Git-only behavior without treating the extractor failure as work.
+- Do not expose transcript paths, complete tool output, system instructions, internal reasoning, passwords, tokens, private keys, authorization headers, or other sensitive data in the final summary.
 
 ## If Work Content Is Missing
 
-If the user has not provided today's work content and has not asked to generate from Git commits, output exactly this text and stop:
+If the user has not provided today's work content and has not requested a summary based on available daily records, output exactly this text and stop. A normal daily summary request uses the default combined Git and Claude conversation sources:
 
 ```text
 您好，作为您的工作总结撰写顾问，我会按照您的要求，为您撰写一份详细且客观的工作总结。请您先简单介绍一下今天的主要工作内容，我会从全局角度进行分析和总结，突出工作中的收获、挑战及改进空间。现在，请您开始讲述今天的工作情况吧。
@@ -68,10 +91,12 @@ Rules:
 - Do not use order-linking words such as“首先”“其次”“然后”“最后”.
 - Do not use metaphors, exaggeration, slogans, or English. Translate technical terms to Chinese where there is a natural equivalent (接口、字段、配置、流程、日志), and keep an English term only when it is a proper noun with no common Chinese name.
 - Do not overemphasize implementation details. Avoid file paths, class/function/variable names, code snippets, stack traces, or log/SQL fragments in the body; mention a name only when it is the only way to identify which piece of work is meant.
+- Do not mention whether a fact came from Git, a conversation transcript, a tool call, or another internal source. Express only the objective work content.
+- Distinguish completed handling, active investigation, discussion, and pending follow-up. A conversation request alone is not evidence of completion.
 
 ## Diligent Time
 
-When the user asks to include diligent time, or when work content indicates overtime content should be recorded, run `uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/calculate_diligent_time.py` to get the end-time line.
+When the user explicitly asks to include diligent time, or provides a clear end time that requires calculation, run `uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/daily-work-summary/scripts/calculate_diligent_time.py` to get the end-time line. Do not infer overtime only from late conversation activity.
 
 Rules:
 
@@ -85,10 +110,11 @@ Rules:
 
 Cover these elements in prose:
 
-- Work content: completed handling, review, modification, checking, communication, or testing.
-- Work method: tools, documents, code review, comparison, debugging, testing, verification, or record checking.
+- Work content: completed handling, review, modification, checking, communication, testing, requirement analysis, troubleshooting, or technical discussion.
+- Work method: tools, documents, code review, comparison, debugging, testing, verification, file reading, or record checking.
+- Evidence state: distinguish handled, in progress, discussed, blocked, and pending follow-up; do not infer completion from a request or plan.
 - Difficulties: unclear fields, missing data, inconsistent returns, dependency issues, import errors, failing tests, ambiguous rules, or incomplete inputs.
-- Resolution: concrete actions taken, such as locating paths, comparing data, adjusting mapping, replacing wording, running checks, or rechecking outputs.
+- Resolution: concrete actions actually observed, such as locating paths, comparing data, adjusting mapping, replacing wording, running checks, or rechecking outputs.
 - Reflection: describe observed challenges, constraints, remaining gaps, and follow-up items, not value or benefit.
 
 ## Body Paragraph Style
@@ -168,6 +194,9 @@ Before answering, scan the draft for:
 - No Chinese character “了” appears.
 - No“首先/其次/然后/最后”appear.
 - Reflection describes facts, constraints, challenges, and follow-up work instead of benefits or impact.
+- Conversation requests and plans are not written as completed work without operation or result evidence.
+- Duplicate topics from conversation facts and Git facts are merged into one theme.
+- The final text does not disclose transcript sources, system content, tool results, internal reasoning, paths, or sensitive values.
 - Body paragraphs carry minimal code-level detail (no paths, names, snippets, traces) and minimal English, and stay readable for someone outside the codebase.
 
 If any check fails, revise before output.

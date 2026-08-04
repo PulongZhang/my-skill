@@ -1,7 +1,7 @@
 [project]
 name = "daily-work-summary"
 version = "0.1.0"
-description = "Utilities for extracting daily Git activity and calculating diligent time"
+description = "Utilities for extracting daily Git and local Claude Code activity and calculating diligent time"
 requires-python = ">=3.8"
 dependencies = []
 
