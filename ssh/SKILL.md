@@ -1,12 +1,12 @@
 ---
 name: ssh-skill
-version: 3.4.0
+version: 3.5.0
 description: "CRITICAL: Use this skill for ALL SSH/server operations. NEVER run raw ssh/scp directly. Triggers: SSH, remote server, server IP/hostname/user@host, connect/login, run command on server, check server/status, deploy, upload/download, file transfer, bastion/jump host, server-to-server transfer, migrate, tunnel, port forward, database/internal service access, and Chinese terms: 服务器, 远程, 连接, 登录, 上传, 下载, 部署, 跳板机, 服务器间传输, 迁移, 隧道, 端口转发, 数据库连接, 内网访问. Provides persistent connections, pooling, jump hosts, SFTP, tunneling, and recovery. DO NOT use for local commands, localhost, or current-directory work."
 allowed-tools: Bash, Read, Write, Glob
 keywords: SSH,服务器,远程,连接,命令,上传,下载,文件传输,跳板机,批量,集群,deploy,部署,运维,登录,执行,查看,检查,管理,操作,访问,传输,迁移,服务器间,tunnel,隧道,端口转发,数据库,内网
 ---
 
-# SSH Skill v3.4.0
+# SSH Skill v3.5.0
 
 高性能 SSH 操作技能，支持守护进程长连接、自动连接复用、跳板机、批量并发、服务器间直接传输、自动错误恢复。
 
@@ -41,7 +41,7 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_co
 
 展示 SSH Skill 的帮助文档。以 Markdown 格式输出以下内容：
 
-**SSH Skill v3.4.0 - 高性能 SSH 操作技能**
+**SSH Skill v3.5.0 - 高性能 SSH 操作技能**
 
 **核心特点：**
 - 守护进程长连接：首次连接后自动启动守护进程，后续命令响应时间从 ~0.45s 降至 ~0.12s
@@ -101,7 +101,7 @@ uv run --project ~/.claude/skills/ssh python ~/.claude/skills/ssh/scripts/ssh_co
    登录新服务器 <IP>，账号 <用户名>，密码/密钥...
    把 <IP> 加进我的服务器列表
    ```
-   按「新环境接入流程」执行：收集信息 → 核对主机指纹 → 创建配置 → 验证 → 密钥加固。
+   按「新环境接入流程」执行：收集信息 → 核对主机指纹 → 创建配置 → 验证 → 部署密钥（密码+密钥双保留）。
 
 **配置管理：**
 - 配置文件位置：`~/.ssh/config`
@@ -221,18 +221,25 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 
 成功 = 指纹与认证均通过，接入完成。失败按下方「失败处理」回滚。
 
-**步骤 5：密钥加固（推荐；密码认证的新环境必做）**
+**步骤 5：部署密钥，保留「密码+密钥」双认证（默认；密码认证的新环境必做）**
+
+所有服务器**默认保留双认证**：密码字段保底可用，公钥部署到服务器待命（服务器开启公钥认证后即可切换）。
 
 1. 确认本地有可用密钥对（没有则生成 `~/.ssh/id_ed25519` 及 `.pub`）。
 2. 部署公钥（需要密码认证可用）：
 ```bash
 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/deploy_pubkey.py" <别名> --pubkey-file ~/.ssh/id_ed25519.pub --key-name <别名> --confirm
 ```
-3. 迁移配置到密钥认证：
+3. 配置加入密钥并**保留 password 字段**（双认证模式）：
+```bash
+uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh_config_manager_v3.py" update <别名> --key ~/.ssh/id_ed25519
+```
+   双模式下脚本实际走密码认证（Paramiko 优先密码），密钥处于待命状态；`list-servers` 认证方式显示「密码+密钥」。
+4. 仅当用户**明确要求纯密钥登录**时，才执行迁移（移除密码字段）：
 ```bash
 uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/migrate_to_key_auth.py" <别名> --key-file id_ed25519
 ```
-4. 再次执行步骤 4 验证。
+5. 再次执行步骤 4 验证。
 
 **步骤 6：采集系统信息（可选）**
 
@@ -475,6 +482,25 @@ Host dev-server
 
 注意：密码认证性能较低，建议升级为密钥认证。
 
+### 密码+密钥 双认证（推荐默认）
+
+所有服务器**默认保持「密码+密钥」双认证**，两种认证同时保留：
+
+```ssh-config
+# ===== dev-server =====
+# description: 开发服务器
+# environment: development
+# password: your-password
+Host dev-server
+    HostName 192.168.1.200
+    User root
+    IdentityFile ~/.ssh/id_ed25519
+```
+
+- 密码字段保证任何情况下可登录；公钥已部署到服务器 `authorized_keys`，随时待命
+- 双模式下脚本实际走密码认证（Paramiko 优先密码），密钥在服务器开启公钥认证后可直接切换
+- 只有用户明确要求纯密钥登录时，才移除 password 字段（`migrate_to_key_auth.py`）
+
 ### 跳板机配置
 
 使用标准 ProxyJump：
@@ -623,6 +649,7 @@ uv run --project "~/.claude/skills/ssh" python "~/.claude/skills/ssh/scripts/ssh
 - 对同一服务器的多个只读查询，优先合并为一次调用
 - 接入新服务器必须按「新环境接入流程」执行：先核对并记录主机指纹，再创建配置
 - 首次连接新主机前必须通过 `verify_host_key.py` 核对指纹，禁止跳过 Host Key 校验
+- 所有服务器默认保持「密码+密钥」双认证（password 字段与 IdentityFile 并存），未经用户明确要求不得移除密码字段
 
 ## 依赖
 
