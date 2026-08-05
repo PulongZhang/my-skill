@@ -19,7 +19,7 @@ description: 当用户要规划、初始化、实现或检查采用 Vue 3、Type
 2. **项目初始化**：创建 Vue 3 + FastAPI + PostgreSQL 的单仓库基础工程。
 3. **功能实现**：在符合该技术栈的项目中完成一个可验证的前后端业务功能。
 4. **架构检查**：检查项目是否偏离框架原则、存在不必要设施或缺少关键边界。
-5. **部署配置**：配置 Docker Compose、OpenResty、Cloudflare 或生产部署说明。编写或修改 Dockerfile 时，先读取 [`references/dockerfile-conventions.md`](references/dockerfile-conventions.md)（前端 Nginx 多阶段、后端 uv 多阶段、非 root 与缓存规则）；涉及 GitHub Actions 镜像构建 / ghcr.io 发布时，再读取 [`references/github-actions-image-build.md`](references/github-actions-image-build.md)（含手动构建、版本号提取、版本清理与 1Panel env_file 踩坑）；涉及 1Panel WAF 启用/排查或 fail2ban 防护时，读取 [`references/1panel-waf.md`](references/1panel-waf.md)（商业版 GUI 锁、global.json 点火法、实测验证矩阵）与 [`references/fail2ban-nginx-jail.md`](references/fail2ban-nginx-jail.md)（SSH/nginx jail 诊断与配置）。
+5. **部署配置**：配置 Docker Compose、OpenResty、Cloudflare 或生产部署说明。编写或修改 Dockerfile 时，先读取 [`references/dockerfile-conventions.md`](references/dockerfile-conventions.md)（前端 Nginx 多阶段、后端 uv 多阶段、非 root 与缓存规则）；涉及 GitHub Actions 镜像构建 / ghcr.io 发布时，再读取 [`references/github-actions-image-build.md`](references/github-actions-image-build.md)（含手动构建、版本号提取、版本清理与 1Panel env_file 踩坑）；涉及 1Panel WAF 启用/排查或 fail2ban 防护时，读取 [`references/1panel-waf.md`](references/1panel-waf.md)（社区版/商业版功能边界、总开关定位、GUI 与配置文件点火法、实测验证矩阵）与 [`references/fail2ban-nginx-jail.md`](references/fail2ban-nginx-jail.md)（SSH/nginx jail 诊断与配置）。
 
 若用户只要求其中一个模式，不要扩展到其他模式。
 

@@ -1,13 +1,22 @@
-# 1Panel WAF 商业版 GUI 锁与配置文件点火法
+# 1Panel WAF 社区版功能边界与配置文件点火法
 
-个人项目部署到 1Panel 管理的 VPS(OpenResty 容器反代)时,关于 WAF 的实战排查经验。来自核云(154.217.249.57)真实排查:WAF 配置全开却 0 拦截,最终定位为商业版 GUI 锁导致总开关 off,手动改配置点火成功。
+个人项目部署到 1Panel 管理的 VPS(OpenResty 容器反代)时,关于 WAF 的实战排查经验。来自核云(154.217.249.57)真实排查:WAF 配置全开却 0 拦截,最终定位为总开关 off,手动改配置点火成功。
 
-## 背景:1Panel WAF 是商业版功能
+## 社区版 / 商业版功能边界(重要,先分清)
 
-- 1Panel(开源版)的 **WAF 是商业版(xpack)功能**,GUI 里"网站 → WAF"入口被锁定,提示仅商业版可用。
-- 但 **WAF 运行时引擎随 openresty 应用包完整安装**:lua 引擎(`/usr/local/openresty/1pwaf/*.lua`)、规则库(`data/rules/`,漏洞规则 10000+ 条)、`waf.conf` 全部就位。
-- 商业授权记录在 `/opt/1panel/db/xpack.db` 的 `licenses` 表(空 = 未授权)。
-- 引擎代码里**没有授权校验**(strings 检查所有 lua,无 license/expire/trial 逻辑;唯一的 "expire" 是 acme 证书续期白名单)。GUI 锁的是入口,不是引擎。
+1Panel 开源版(社区版)**自带 WAF,全局设置与网站设置中的基础防护可用**,不需要商业版。商业版独有:
+
+| 商业版独有功能 | 说明 |
+|---|---|
+| 拦截地图 | 统计并展示 30 天内拦截的地理位置分布 |
+| 日志 / 封锁记录 | 攻击日志与封禁记录的查看界面 |
+| 地区访问限制(geoRestrict) | 按地理位置限制访问来源 |
+| 自定义规则(ACL) | 自定义拦截规则 |
+| 自定义拦截页面 | 请求被拦截后的显示页面 |
+
+**社区版即可用(全局设置/网站设置中):** WAF 总开关、SQL 注入、XSS、CC 防护、404 检测(notFoundCount)、攻击频率(attackCount)、漏洞规则库(vuln)、UA/URL/IP 黑白名单、请求参数(args)、Header/Cookie 检查等。这些在 GUI 的"网站 → WAF → 全局设置/网站设置"中直接可配,不需要手动改文件。
+
+**判断 GUI 里某项是否商业版:** 页面/功能入口若提示"仅商业版可用"或显示升级引导,即为商业版;能正常开关的就是社区版功能。不要因为看到某个商业版入口(如拦截地图)被锁,就误以为整个 WAF 不可用。
 
 ## 症状:WAF 配置全开却完全不拦截
 
@@ -32,12 +41,19 @@ curl -sk -o /dev/null -w 'HTTP %{http_code}\n' \
 
 | 文件 | 作用 |
 |---|---|
-| `data/conf/global.json` | **全局总闸** `waf.state`(GUI 锁死后永远是 off) |
-| `data/sites/<域名>/config.json` | 站点级开关(显示 on 也没用,总闸关着全白搭) |
+| `data/conf/global.json` | **全局总闸** `waf.state`(GUI 的"全局设置"里对应 WAF 开关) |
+| `data/sites/<域名>/config.json` | 站点级开关(GUI 的"网站设置"里对应,显示 on 但总闸 off 则无效) |
 
 `waf.lua` 里 `is_global_state_on` 检查的就是 global.json,总闸 off → 整个 WAF 直接放行,不拦不记。
 
-## 点火方法(绕过 GUI,免费启用)
+## 点火方法(首选 GUI,手动改文件为备用)
+
+**首选:GUI 操作(社区版即可,配置会同步到文件,不会被面板重置)**
+- 1Panel 面板 → 网站 → WAF → 全局设置:打开 WAF 总开关,按需开启 404 检测(notFoundCount)、CC 防护、攻击频率(attackCount)、漏洞检测(vuln)等。
+- 网站设置:确认各站点 WAF 处于"防护中"(protection)。
+- 保存后面板自动写入 global.json 并 reload,无需手动改文件。
+
+**备用:手动改文件(GUI 不可用/需批量时)**
 
 ```bash
 # 1. 备份(必须!)
@@ -58,7 +74,7 @@ docker exec 1Panel-openresty-tAPf nginx -t
 docker exec 1Panel-openresty-tAPf nginx -s reload
 ```
 
-用 Python 改 JSON 而非 sed(嵌套结构安全)。
+用 Python 改 JSON 而非 sed(嵌套结构安全)。手动改文件后,若之后在面板里再保存一次 WAF 设置,面板会以 GUI 状态为准重写文件——因此**手动改与 GUI 开的效果最终一致,但以 GUI 为权威源**。
 
 ## 验证
 
@@ -77,7 +93,7 @@ curl -sk -o /dev/null -w '%{http_code}\n' $R -H "$H" https://api.example.com/.en
 
 ## 已知限制与坑
 
-1. **GUI 仍显示未授权**:在面板做网站/WAF 操作时,1Panel 可能把配置同步回 off(面板是权威源)。WAF 又失效时,重改 global.json 的 state 再 reload 即可。
+1. **GUI 是权威源**:在面板保存 WAF 设置时,1Panel 会以 GUI 状态重写配置文件。手动改文件后若面板又保存过,以面板为准;WAF 意外失效时,先查 global.json 的 state 再 reload 即可。商业版功能(拦截地图、日志查看、地区限制、ACL、自定义拦截页)在社区版 GUI 中不可用,但不影响社区版基础防护的运行。
 2. **规则覆盖度有限**:如 `union select` 裸词不拦(规则只匹配 `select(`、`sleep(` 等带括号形式)。补规则需手改 `data/rules/` 下的 json,裸词进黑名单误伤大,不建议。
 3. **日志格式注意**:openresty 的 access_log 带 `$http_x_forwarded_for`,若站点走 CDN,按 `$remote_addr` 封禁会误封 CDN 节点。当前直连流量按 remote_addr 没问题。
 4. **站点独立日志**:1Panel 每个站点有独立 access_log(如 `/www/sites/<域名>/log/access.log`),全局 `/var/log/nginx/access.log` 只记录 default server 的裸流量。
