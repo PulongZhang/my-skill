@@ -19,7 +19,7 @@ description: 当用户要规划、初始化、实现或检查采用 Vue 3、Type
 2. **项目初始化**：创建 Vue 3 + FastAPI + PostgreSQL 的单仓库基础工程。
 3. **功能实现**：在符合该技术栈的项目中完成一个可验证的前后端业务功能。
 4. **架构检查**：检查项目是否偏离框架原则、存在不必要设施或缺少关键边界。
-5. **部署配置**：配置 Docker Compose、OpenResty、Cloudflare 或生产部署说明。涉及 GitHub Actions 镜像构建 / ghcr.io 发布时，先读取 [`references/github-actions-image-build.md`](references/github-actions-image-build.md)（含手动构建、版本号提取、版本清理与 1Panel env_file 踩坑）。
+5. **部署配置**：配置 Docker Compose、OpenResty、Cloudflare 或生产部署说明。编写或修改 Dockerfile 时，先读取 [`references/dockerfile-conventions.md`](references/dockerfile-conventions.md)（前端 Nginx 多阶段、后端 uv 多阶段、非 root 与缓存规则）；涉及 GitHub Actions 镜像构建 / ghcr.io 发布时，再读取 [`references/github-actions-image-build.md`](references/github-actions-image-build.md)（含手动构建、版本号提取、版本清理与 1Panel env_file 踩坑）。
 
 若用户只要求其中一个模式，不要扩展到其他模式。
 
@@ -168,8 +168,8 @@ Redis、异步任务、WebSocket 等组件只在需求明确需要时加入。
 ### 部署配置
 
 1. 先确认实际域名、端口、证书终止位置和部署目录。
-2. Web 与 API 宿主机端口默认只绑定 `127.0.0.1`。
-3. PostgreSQL 默认不映射宿主机公网端口。
+2. 统一网络方案：所有容器的宿主机端口一律只绑定 `127.0.0.1:端口`，反向代理只走回环地址。禁止用容器 IP（如 `172.x.x.x`）作为反代目标——容器重建后 IP 漂移，旧配置失效表现为反代 502。1Panel 面板的反向代理同样指向 `127.0.0.1:端口`。
+3. PostgreSQL 默认不映射宿主机端口。
 4. OpenResty 保留 `/api/v1` 路径，不默认重写 API 前缀。
 5. Cloudflare 使用严格的源站 HTTPS 校验，不使用 Flexible SSL。
 6. 输出或修改配置后，说明实际执行过的配置检查和仍需在服务器完成的人工步骤。
