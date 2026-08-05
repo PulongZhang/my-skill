@@ -133,6 +133,20 @@ print(base64.b64encode(pub).decode().rstrip('='))
 
 - 客户端 pbk 必须与服务端 private_key 配对;升级/优化时**保留 uuid + 密钥对**,只轮换 SNI/short_id,客户端零迁移。
 
+## 233boy 加固 fork 经验(PulongZhang/sing-box)
+
+用 233boy 系脚本安装/审计 sing-box 时,参照本分支(commit `cc975d5b`, 2026-08-04)已实测的加固项;**上游 233boy 默认配置是反面教材**,逐条对照:
+
+1. **下载强制 TLS 校验**:上游 `install.sh` 与 `src/init.sh` 的 `_wget()` 各带一份全局 `--no-check-certificate`(两份都要 grep,容易漏第二份);本分支移除后,下载被篡改/不完整会直接失败,而不是静默装坏;
+2. **安装后二进制自检**:`sing-box version` 失败即中止安装(`msg err ... 安装中止` + 清理临时目录),拦下载不完整、被篡改、架构不匹配;
+3. **SNI 候选 11 个实测域名**(全部 TLS1.3 + X25519 + ALPN h2):`aws.amazon.com` / `d1.awsstatic.com` / `storage.googleapis.com` / `www.microsoft.com` / `www.bing.com` / `api.github.com` / `github.com` / `www.samsung.com` / `www.nvidia.com` / `www.ebay.com` / `www.paypal.com`;剔除被滥用最严重的 `www.cloudflare.com` / `dash.cloudflare.com` / `apple.com` 系(扫描器重点关注名单)。**因地制宜**:服务器在 AWS 选 awsstatic,在 GCP 选 storage.googleapis.com;
+4. **short_id 随机 8 位 hex**(`openssl rand -hex 4`,`/dev/urandom` 兜底)——上游 `short_id:[""]` 空值是一键脚本指纹;客户端 URL 自动带 `sid=`,旧链接(无 sid)会被拒,升级后必须重新导入;
+5. **公钥持久化 `conf/.pbk`**,替代上游往服务端配置塞 `public_key_xxx` 假 outbound 的黑客做法(`get()` 保留旧配置回退读取,老库无缝迁移);
+6. **日志级别 `info` → `warn`**:上游每连接刷盘,access.log 无限膨胀;
+7. **自检工具**:`echo | openssl s_client -connect <sni>:443 -servername <sni> -tls1_3 -alpn h2 | grep ALPN`。
+
+审计上游一键脚本的 checklist:grep **全部** `.sh` 的 `--no-check-certificate`、short_id 是否为空、SNI 列表是否实测过、有无 `public_key_*` 假 outbound、日志级别。发现任一项即为未加固脚本,优先改用本 fork 或手工加固。
+
 ## 端到端验证
 
 改配置后必须验证:
