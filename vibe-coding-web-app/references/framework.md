@@ -492,6 +492,15 @@ ports:
 - 宿主机端口只绑回环地址，避免绕过 OpenResty 直接暴露到公网；
 - PostgreSQL 不映射宿主机端口，只允许 Docker 内部访问；若本机管理工具需要直连，同样只绑 `127.0.0.1:5432:5432`，不暴露到 `0.0.0.0`。
 
+**配置与密钥单一来源：**
+
+- 所有密钥只放 `.env`（服务器上 `chmod 600`），不写死在 compose、不进 1Panel GUI 字段；
+- 派生连接串在 compose 中用 `${VAR}` 组合（如 `DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}`），避免同一密码出现两处；
+- 注意 1Panel 生成的 compose 可能没有 `env_file: .env`（只有 image/ports/restart），容器内环境变量为空会导致应用崩溃循环（反代 502）。用 `docker inspect <容器> --format '{{range .Config.Env}}{{println .}}{{end}}'` 确认注入，补 `env_file: .env` 后必须 `docker compose up -d` 重建（`restart` 不会重新读取 env_file）；
+- JWT_SECRET / 加密密钥必须固定并备份：空值或每次启动都变，重启后会话、TOTP、加密数据全部失效。
+
+健康检查、升级与备份等日常运维见 [`1panel-compose-and-ops.md`](1panel-compose-and-ops.md)。
+
 ---
 
 ## 11. OpenResty 示例
@@ -540,6 +549,37 @@ app.include_router(api_router, prefix="/api/v1")
 
 在 1Panel 面板中配置反向代理时，目标地址同样填写 `127.0.0.1:8000` / `127.0.0.1:3000`，不要使用容器 IP：容器重建后 IP 漂移，反代会 502。
 
+**流式 / WebSocket 端点（SSE、LLM 流式输出、实时推送）需要额外配置：**
+
+```nginx
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 流式响应：禁缓冲，长超时
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_cache off;
+        gzip off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        send_timeout 3600s;
+
+        # WebSocket（实时推送、终端、协作类）
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+```
+
+- 这些指令合并进现有 `location` 即可，不要在 1Panel 生成的站点里新增重复的 `location /`；
+- 应用需要带下划线的请求头（如 `session_id`）时，在 `http {}` 块加 `underscores_in_headers on;`，否则头会被丢弃；
+- 以上只解决源站侧缓冲与本地超时，Cloudflare 有 120 秒代理上限，更长的任务见 [`cloudflare-streaming-and-tls.md`](cloudflare-streaming-and-tls.md) 的灰云方案。
+
 ---
 
 ## 12. Cloudflare 配置原则
@@ -566,11 +606,25 @@ Web / API 容器
 
 不要使用 Flexible SSL，避免源站明文通信和 HTTPS 重定向循环。
 
+**灰云（仅 DNS）注意事项：**
+
+- 切到"仅 DNS"后，Cloudflare Origin CA 证书对直连客户端无效（报 `unable to get local issuer certificate`），每个灰云域名必须装公开受信证书（Let's Encrypt）；不要用 `-k` / 关闭证书校验绕过；
+- 流式/长连接 API 建议用独立灰云子域（如 `direct-api.example.com`）给 API 客户端，网页域名保持橙云；
+- 524 是源站 120 秒内未返回完整响应，不是 Cloudflare 故障：记下 CF-Ray 与时间戳，关联源站 Nginx/应用日志，再用 `curl --resolve 域名:443:<源站IP>` 直连对比；应用自称低 TTFB 但 524 时，检查 Nginx 是否缓冲了响应没吐给 Cloudflare。完整诊断见 [`cloudflare-streaming-and-tls.md`](cloudflare-streaming-and-tls.md)。
+
 ---
 
-## 13. Vibe Coding 开发约束
+## 13. 1Panel Compose 项目与日常运维
 
-### 13.1 先写最小需求规格
+- 想让 1Panel 管理生命周期：面板 → 容器 → 编排 → 创建编排 → 编辑，粘贴 compose 内容创建（项目 source 显示 `1Panel`）；宿主机建目录再"选择路径"导入的显示为 `Local`，面板生命周期控制少；
+- `.env` 在首次启动前放在 Compose 工作目录；"拉取镜像"是创建后/升级时才用的操作，不能替代保存/创建编排；
+- 健康检查、升级（`docker compose pull && docker compose up -d`）、备份三件套（compose + `.env` + `pg_dump`）与故障排查（502、TLS 循环、会话失效）详见 [`1panel-compose-and-ops.md`](1panel-compose-and-ops.md)。
+
+---
+
+## 14. Vibe Coding 开发约束
+
+### 14.1 先写最小需求规格
 
 每个功能至少明确：
 
@@ -584,7 +638,7 @@ Web / API 容器
 
 不要只给 AI 一个宽泛要求，例如“实现完整的用户管理”。
 
-### 13.2 每次只完成一个可验证任务
+### 14.2 每次只完成一个可验证任务
 
 推荐顺序：
 
@@ -598,7 +652,7 @@ Web / API 容器
 7. 提交 Git
 ```
 
-### 13.3 强制质量检查
+### 14.3 强制质量检查
 
 前端：
 
@@ -624,7 +678,7 @@ uv run alembic revision --autogenerate -m "新增用户表"
 uv run alembic upgrade head
 ```
 
-### 13.4 不提前引入复杂设施
+### 14.4 不提前引入复杂设施
 
 第一版不建议加入：
 
@@ -642,7 +696,7 @@ Redis、异步任务、WebSocket 等组件应在出现明确需求后再加入�
 
 ---
 
-## 14. 推荐实施顺序
+## 15. 推荐实施顺序
 
 ```text
 1. 初始化项目目录和 Git 仓库
@@ -676,7 +730,7 @@ Redis、异步任务、WebSocket 等组件应在出现明确需求后再加入�
 
 ---
 
-## 15. 最终方案总结
+## 16. 最终方案总结
 
 ```text
 前端：

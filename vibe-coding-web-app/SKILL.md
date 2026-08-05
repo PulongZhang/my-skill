@@ -19,7 +19,7 @@ description: 当用户要规划、初始化、实现或检查采用 Vue 3、Type
 2. **项目初始化**：创建 Vue 3 + FastAPI + PostgreSQL 的单仓库基础工程。
 3. **功能实现**：在符合该技术栈的项目中完成一个可验证的前后端业务功能。
 4. **架构检查**：检查项目是否偏离框架原则、存在不必要设施或缺少关键边界。
-5. **部署配置**：配置 Docker Compose、OpenResty、Cloudflare 或生产部署说明。编写或修改 Dockerfile 时，先读取 [`references/dockerfile-conventions.md`](references/dockerfile-conventions.md)（前端 Nginx 多阶段、后端 uv 多阶段、非 root 与缓存规则）；涉及 GitHub Actions 镜像构建 / ghcr.io 发布时，再读取 [`references/github-actions-image-build.md`](references/github-actions-image-build.md)（含手动构建、版本号提取、版本清理与 1Panel env_file 踩坑）；涉及 1Panel WAF 启用/排查或 fail2ban 防护时，读取 [`references/1panel-waf.md`](references/1panel-waf.md)（社区版/商业版功能边界、总开关定位、GUI 与配置文件点火法、实测验证矩阵）与 [`references/fail2ban-nginx-jail.md`](references/fail2ban-nginx-jail.md)（SSH/nginx jail 诊断与配置）。
+5. **部署配置**：配置 Docker Compose、OpenResty、Cloudflare 或生产部署说明。编写或修改 Dockerfile 时，先读取 [`references/dockerfile-conventions.md`](references/dockerfile-conventions.md)（前端 Nginx 多阶段、后端 uv 多阶段、非 root 与缓存规则）；涉及 GitHub Actions 镜像构建 / ghcr.io 发布时，再读取 [`references/github-actions-image-build.md`](references/github-actions-image-build.md)（含手动构建、版本号提取、版本清理与 1Panel env_file 踩坑）；涉及 1Panel WAF 启用/排查或 fail2ban 防护时，读取 [`references/1panel-waf.md`](references/1panel-waf.md)（社区版/商业版功能边界、总开关定位、GUI 与配置文件点火法、实测验证矩阵）与 [`references/fail2ban-nginx-jail.md`](references/fail2ban-nginx-jail.md)（SSH/nginx jail 诊断与配置）；涉及 1Panel Compose 编排创建与日常运维时，读取 [`references/1panel-compose-and-ops.md`](references/1panel-compose-and-ops.md)（编排创建方式、env_file 缺失坑、升级与备份）；涉及流式 API、WebSocket 或 Cloudflare 灰云（仅 DNS）时，读取 [`references/cloudflare-streaming-and-tls.md`](references/cloudflare-streaming-and-tls.md)（Origin CA 证书坑、524 诊断、反代缓冲配置）。
 
 若用户只要求其中一个模式，不要扩展到其他模式。
 
@@ -171,8 +171,11 @@ Redis、异步任务、WebSocket 等组件只在需求明确需要时加入。
 2. 统一网络方案：所有容器的宿主机端口一律只绑定 `127.0.0.1:端口`，反向代理只走回环地址。禁止用容器 IP（如 `172.x.x.x`）作为反代目标——容器重建后 IP 漂移，旧配置失效表现为反代 502。1Panel 面板的反向代理同样指向 `127.0.0.1:端口`。
 3. PostgreSQL 默认不映射宿主机端口。
 4. OpenResty 保留 `/api/v1` 路径，不默认重写 API 前缀。
-5. Cloudflare 使用严格的源站 HTTPS 校验，不使用 Flexible SSL。
-6. 输出或修改配置后，说明实际执行过的配置检查和仍需在服务器完成的人工步骤。
+5. Cloudflare 使用严格的源站 HTTPS 校验，不使用 Flexible SSL。若 API 需要灰云（仅 DNS）直连，源站必须装公开受信证书（Let's Encrypt），Origin CA 证书只在橙云时有效；流式/SSE 端点出现 524 时按 [`references/cloudflare-streaming-and-tls.md`](references/cloudflare-streaming-and-tls.md) 诊断。
+6. 确认应用健康检查端点，启动后用 `curl --fail http://127.0.0.1:<端口>/<健康端点>` 本地验证，再配置反代。
+7. 应用有 SSE/流式/WebSocket 端点时，检查反代是否禁缓冲（`proxy_buffering off`）、开 Upgrade 头、设长超时；可能超过 Cloudflare 120 秒的任务考虑独立灰云域名。
+8. 涉及 1Panel 编排创建、升级、备份时，按 [`references/1panel-compose-and-ops.md`](references/1panel-compose-and-ops.md) 执行：`.env` 先于首次启动存在、创建后用 `docker inspect` 确认 env_file 注入、升级/备份三件套（compose、.env、数据库）。
+9. 输出或修改配置后，说明实际执行过的配置检查和仍需在服务器完成的人工步骤。
 
 ## 验证
 
