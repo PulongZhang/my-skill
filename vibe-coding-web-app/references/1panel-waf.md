@@ -100,6 +100,53 @@ curl -sk -o /dev/null -w '%{http_code}\n' $R -H "$H" https://api.example.com/.en
 5. **fail2ban 兜底**:若 WAF 拦截效果不足(如扫描仍刷屏),可给 fail2ban 加 nginx jail(404 风暴 + 攻击特征正则),与 WAF 功能重叠但双保险。完整配置见 [`fail2ban-nginx-jail.md`](fail2ban-nginx-jail.md)。
 6. **默认 server 加固**:`ssl_reject_handshake on` + 站点敏感文件 location 正则(挡 .env/.git/.svn 等)是 1Panel 自带的,与 WAF 无关,保留。
 
+## 症状:API 客户端(Claude Code 等)请求被误拦 —— "API Error: 请求拦截"
+
+与"完全不拦截"相反的问题:WAF 太激进,把合法 API 请求当攻击拦了。2026-08 真实案例(核云 `api.654355.xyz` + 圣何塞 `api.puzzle.de5.net` 同款同修)。
+
+**症状特征(可复用判别点):**
+- Claude Code 等 agent 客户端用域名(base_url 走 openresty+Cloudflare)调用 → 报 `API Error: 请求拦截` / 状态栏 `● Please run /login`
+- 同一个客户端直连 IP:端口 → 完全正常
+- 发 `hello` 等纯文本 → 正常;发复杂对话(带代码/skill 内容)→ 被拦
+- 浏览器/curl 访问首页正常
+
+**根因:内容检测规则误判。** agent 请求体是任意代码/文档内容,复杂对话必然带 `select(`、`$(...)`、`<script>`、`../../` 等攻击指纹,命中 1Panel WAF 的:
+- `args` 规则组(sqlInject / rce / dirFilter 三个特征类都在它下面)
+- `xss` 规则
+
+返回 403 + 拦截页(`data/default/forbidden.html`,标题就是 **"请求拦截"**),客户端把页面文字显示成 API Error。
+
+**确认方法(拦截日志):** 社区版 GUI 没有"日志/封锁记录"查看界面(那是商业版),但底层 SQLite 记录全在:
+
+```bash
+docker exec 1Panel-openresty-tAPf sh -c 'ls /usr/local/openresty/1pwaf/data/db/waf/'
+# attack_logs.db = 拦截记录(外键关联 ips/rules/rule_types/match_values/req_uris 各库)
+# docker cp 拉出后 sqlite 联表查,能看到命中规则名(sqlInject/rce/xss)与具体特征
+```
+
+**修复:站点级关闭内容检测,保留限频类防护**(GUI 优先:网站 → 该站点 → WAF → 网站设置 → 关 args/sql/xss;手动改文件备用):
+
+```bash
+# data/sites/<域名>/config.json 中 args/sql/xss 的 state 改 "off"(用 python 改 JSON,勿 sed),然后:
+docker exec 1Panel-openresty-tAPf nginx -s reload
+```
+
+- 只关内容检测(args/sql/xss),**保留** CC / notFoundCount / attackCount / UA / URL / 方法黑白名单 —— API 端点上做内容指纹检测必然误伤,限频和扫描拦截仍有价值
+- 纯 API 域名(仅 agent/程序调用、有 key 认证)甚至可以站点级 WAF 全关,API key 就是门禁
+
+**验证矩阵(改完必须实测):**
+
+```bash
+for p in 'hello' '<script>alert(1)</script>' 'SELECT * FROM users WHERE id=1 OR 1=1' 'read ../../etc/passwd' 'ls -la | grep passwd; cat /etc/shadow'; do
+  curl -s -o /dev/null -w "%{http_code} " -X POST https://<域名>/v1/messages \
+    -H 'Content-Type: application/json' -H 'x-api-key: test' -H 'anthropic-version: 2023-06-01' \
+    -d "{\"model\":\"claude-sonnet-4-5\",\"max_tokens\":64,\"messages\":[{\"role\":\"user\",\"content\":\"$p\"}]}"
+done; echo
+# 修复前:403(拦截页);修复后:401(到达上游,API key 校验)或 200
+```
+
+**注意:** GUI 仍是权威源,面板保存会重写站点配置;多台服务器同构(核云 `1Panel-openresty-tAPf` / 圣何塞 `1Panel-openresty-z2Pf`)修法一致,可批量。
+
 ## 路径速查(1Panel openresty 应用)
 
 - 容器:`1Panel-openresty-tAPf`(host 网络,宿主看不到 `/usr/local/openresty`,要 docker exec)
@@ -108,4 +155,5 @@ curl -sk -o /dev/null -w '%{http_code}\n' $R -H "$H" https://api.example.com/.en
 - 关键文件:`conf/global.json`(总闸)、`conf/monitor.json`(监控)、`conf/sites.json`(站点列表)、`conf/siteConfig.json`(默认站点配置)
 - 站点规则:`data/sites/<域名>/rules/*.json`(可覆盖全局)、`data/rules/*.json`(全局)
 - 监控库:`data/db/monitor/<域名>/site_req_logs.db`
+- 拦截日志库:`data/db/waf/attack_logs.db`(拦截记录,联 `ips/rules/rule_types/match_values/req_uris` 等库查详情;社区版 GUI 看不到,只能查库)
 - 授权库:`/opt/1panel/db/xpack.db` 的 `licenses` 表
