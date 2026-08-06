@@ -42,6 +42,8 @@ uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/dai
 
 The extractor searches `--dir` first, then `CLAUDE_CONFIG_DIR/projects`, then `~/.claude/projects`. These are transcript storage locations, not project scan roots. The project scope defaults to the same `D:\CETWorkSpace` root used by the Git extractor and can be overridden with `--roots`; records are selected by the transcript `cwd` field. It streams `.jsonl` files recursively, converts timestamps to the local date, skips malformed lines, and emits structured events for user messages and assistant text. Tool-use records and complete tool results are not emitted as work details. Thinking blocks, system reminders, and unknown inputs are skipped, and sensitive values in retained text are redacted.
 
+Both extractors normalize Windows drive paths to forward slashes, so `--roots D:\CETWorkSpace` (with backslashes) and the default config both scan correctly under Git Bash. Backslashes lost at the shell layer before reaching the script (unquoted `D:\CETWorkSpace`) cannot be recovered, so quote such arguments or use forward slashes.
+
 Treat the conversation output as raw facts, not as a ready-made summary. Apply these evidence rules:
 
 - A user request, proposal, or assistant plan without an observed operation or result means discussion, analysis, or pending work; never rewrite it as completed work. A user's explicit factual statement that a task was completed may be recorded as a user-provided fact.

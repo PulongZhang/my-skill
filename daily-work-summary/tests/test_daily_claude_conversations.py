@@ -310,6 +310,62 @@ class DailyClaudeConversationsTest(unittest.TestCase):
             self.assertEqual(payload["date_range"]["since"], "2026-08-04")
             self.assertEqual(len(payload["events"]), 1)
 
+    def test_normalize_win_path_converts_backslash(self):
+        self.assertEqual(
+            conversations.normalize_win_path(r"D:\CETWorkSpace"),
+            "D:/CETWorkSpace",
+        )
+        self.assertEqual(
+            conversations.normalize_win_path(r"D:\Users\example\.claude\projects"),
+            "D:/Users/example/.claude/projects",
+        )
+        # 已是正斜杠或非盘符路径保持不变
+        self.assertEqual(conversations.normalize_win_path("D:/CETWorkSpace"), "D:/CETWorkSpace")
+        self.assertEqual(conversations.normalize_win_path("/home/user/proj"), "/home/user/proj")
+
+    def test_resolve_history_dir_accepts_backslash_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            projects = root / "projects"
+            projects.mkdir()
+            resolved = conversations.resolve_history_dir(str(root))
+            self.assertEqual(resolved, projects)
+
+    def test_cli_roots_backslash_normalized_in_payload(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transcript = root / "project" / "session.jsonl"
+            transcript.parent.mkdir()
+            transcript.write_text(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "timestamp": "2026-08-04T10:00:00+00:00",
+                        "cwd": str(root),
+                        "message": {"role": "user", "content": "记录一次核对"},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                return_code = conversations.main(
+                    [
+                        "--date",
+                        "2026-08-04",
+                        "--dir",
+                        str(root).replace("/", "\\"),
+                        "--roots",
+                        str(root).replace("/", "\\"),
+                        "--json",
+                    ]
+                )
+            payload = json.loads(output.getvalue())
+            self.assertEqual(return_code, 0)
+            self.assertTrue(payload["project_roots"][0].startswith("D:/") or "/" in payload["project_roots"][0])
+            self.assertEqual(len(payload["events"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -17,6 +17,7 @@ import subprocess
 import os
 import sys
 import io
+import re
 import argparse
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -43,6 +44,20 @@ SCAN_ROOTS = [
 MAX_DEPTH = 8
 
 # ==================== 配置区域结束 ====================
+
+
+def normalize_paths(paths):
+    r"""把 Windows 路径统一为正斜杠形式，避免反斜杠被当作转义字符而丢失。
+
+    Git Bash 下子进程以字符串方式接收参数，`D:\CETWorkSpace` 这类反斜杠路径
+    会被吞掉反斜杠变成 `D:CETWorkSpace`，导致目录扫描为空。统一转为 `D:/CETWorkSpace`。
+    """
+    normalized = []
+    for p in paths:
+        if re.match(r"^[A-Za-z]:[\\/]", p):
+            p = p.replace("\\", "/")
+        normalized.append(p)
+    return normalized
 
 
 def find_git_repos(roots, max_depth=MAX_DEPTH):
@@ -371,7 +386,7 @@ def main():
         before_dt = datetime.now() + timedelta(days=1)
         before_date = before_dt.strftime("%Y-%m-%d")
 
-    scan_roots = args.roots if args.roots else SCAN_ROOTS
+    scan_roots = normalize_paths(args.roots if args.roots else SCAN_ROOTS)
 
     print(f"🔍 扫描目录: {', '.join(scan_roots)}")
     print(f"👤 用户: {author}")

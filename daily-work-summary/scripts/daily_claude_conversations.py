@@ -24,7 +24,7 @@ import os
 import re
 import sys
 from datetime import date, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 
@@ -118,6 +118,13 @@ def _new_stats() -> Stats:
     }
 
 
+def normalize_win_path(path: str) -> str:
+    """把 Windows 路径统一为正斜杠形式，避免反斜杠被当作转义字符而丢失。"""
+    if re.match(r"^[A-Za-z]:[\\/]", path):
+        return str(PureWindowsPath(path)).replace("\\", "/")
+    return path
+
+
 def resolve_history_dir(
     explicit_dir: Optional[str] = None,
     environ: Optional[Dict[str, str]] = None,
@@ -128,6 +135,7 @@ def resolve_history_dir(
     home_path = Path.home() if home is None else Path(home)
 
     if explicit_dir:
+        explicit_dir = normalize_win_path(explicit_dir)
         candidate = Path(os.path.expandvars(os.path.expanduser(explicit_dir))).resolve()
         return _as_projects_dir(candidate)
 
@@ -676,7 +684,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         parser.error(str(exc))
 
     history_dir = resolve_history_dir(args.history_dir)
-    project_roots = args.roots if args.roots else DEFAULT_PROJECT_ROOTS
+    project_roots = (
+        [normalize_win_path(p) for p in args.roots] if args.roots else DEFAULT_PROJECT_ROOTS
+    )
     stats = _new_stats()
     events: List[Event] = []
     history_dir_found = history_dir.is_dir() or history_dir.is_file()
