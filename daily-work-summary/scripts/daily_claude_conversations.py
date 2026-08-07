@@ -656,12 +656,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--project", default=None, help="项目关键词，匹配项目目录、会话文件或工作目录")
     parser.add_argument(
+        "--project-filter",
+        dest="project_filter",
+        default=None,
+        help="项目关键词（仅保留目标项目素材，供配合 --roots 提取目标项目内容时过滤旁支会话）",
+    )
+    parser.add_argument(
         "--roots",
         nargs="+",
         default=None,
         help="项目扫描根目录，默认与 Git 提取器一致",
     )
     parser.add_argument("--json", action="store_true", help="输出结构化 JSON")
+    parser.add_argument(
+        "--only-user",
+        action="store_true",
+        help="只保留用户消息素材，丢弃助手文字（用于配合 --project-filter 提取目标项目用户消息）",
+    )
     parser.add_argument("--output", "-o", default=None, help="输出文件路径（默认: 打印到控制台）")
     parser.add_argument(
         "--max-chars-per-message",
@@ -700,13 +711,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     history_dir,
                     start_date,
                     end_date,
-                    project_filter=args.project,
+                    project_filter=args.project_filter or args.project,
                     project_roots=project_roots,
                     max_chars_per_message=args.max_chars_per_message,
                     stats=stats,
                 )
             )
 
+    if args.only_user:
+        events = [event for event in events if event.get("record_type") == "user_message"]
     events = deduplicate_events(events)
     stats["events_after_dedup"] = len(events)
     if args.json:
@@ -716,7 +729,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 start_date,
                 end_date,
                 stats,
-                project_filter=args.project,
+                project_filter=args.project_filter or args.project,
                 project_roots=project_roots,
                 history_dir_found=history_dir_found,
             ),
@@ -724,7 +737,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             indent=2,
         )
     else:
-        rendered = format_report(events, start_date, end_date, stats, args.project)
+        rendered = format_report(
+            events, start_date, end_date, stats, args.project_filter or args.project
+        )
 
     if args.output:
         output_path = Path(os.path.expandvars(os.path.expanduser(args.output)))

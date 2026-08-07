@@ -310,6 +310,58 @@ class DailyClaudeConversationsTest(unittest.TestCase):
             self.assertEqual(payload["date_range"]["since"], "2026-08-04")
             self.assertEqual(len(payload["events"]), 1)
 
+    def test_cli_project_filter_and_only_user(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transcript = root / "project" / "session.jsonl"
+            transcript.parent.mkdir()
+            records = [
+                {
+                    "type": "user",
+                    "timestamp": "2026-08-04T10:00:00+00:00",
+                    "cwd": str(root / "target-workspace"),
+                    "message": {"role": "user", "content": "目标项目用户消息"},
+                },
+                {
+                    "type": "assistant",
+                    "timestamp": "2026-08-04T10:01:00+00:00",
+                    "cwd": str(root / "target-workspace"),
+                    "message": {"role": "assistant", "content": "目标项目助手文字"},
+                },
+                {
+                    "type": "user",
+                    "timestamp": "2026-08-04T10:02:00+00:00",
+                    "cwd": str(root / "other-workspace"),
+                    "message": {"role": "user", "content": "旁支项目用户消息"},
+                },
+            ]
+            transcript.write_text(
+                "\n".join(json.dumps(record, ensure_ascii=False) for record in records),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                return_code = conversations.main(
+                    [
+                        "--date",
+                        "2026-08-04",
+                        "--dir",
+                        str(root),
+                        "--roots",
+                        str(root),
+                        "--project-filter",
+                        "target-workspace",
+                        "--only-user",
+                        "--json",
+                    ]
+                )
+            payload = json.loads(output.getvalue())
+            self.assertEqual(return_code, 0)
+            self.assertEqual(len(payload["events"]), 1)
+            self.assertEqual(payload["events"][0]["record_type"], "user_message")
+            self.assertEqual(payload["events"][0]["text"], "目标项目用户消息")
+            self.assertEqual(payload["project_filter"], "target-workspace")
+
     def test_normalize_win_path_converts_backslash(self):
         self.assertEqual(
             conversations.normalize_win_path(r"D:\CETWorkSpace"),
