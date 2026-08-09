@@ -1,0 +1,6 @@
+[project]
+name = "ppt-master-workflow"
+version = "0.1.0"
+description = "Generate detailed share/debrief PPTs from meeting notes + brand template via ppt-master Quick Generate"
+requires-python = ">=3.10"
+dependencies = []
