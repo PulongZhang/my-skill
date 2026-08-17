@@ -311,8 +311,11 @@
       requireId(task._id, `tasks/bulk payload[${index}]._id`);
       if (!requested.has(task._id) || byId.has(task._id)) throw new Error(`tasks/bulk 返回未请求或重复任务 ${task._id}`);
       requireApiText(task.content, `任务 ${task._id}.content`);
-      for (const field of ['isDeleted', 'isArchived', 'isDone']) {
+      for (const field of ['isDeleted', 'isDone']) {
         if (typeof task[field] !== 'boolean') throw new Error(`任务 ${task._id}.${field} 缺失或不是 boolean`);
+      }
+      if (task.isArchived !== undefined && task.isArchived !== null && typeof task.isArchived !== 'boolean') {
+        throw new Error(`任务 ${task._id}.isArchived 必须是 boolean 或 null`);
       }
       for (const field of ['_projectId', '_scenariofieldconfigId', '_taskflowstatusId']) requireId(task[field], `任务 ${task._id}.${field}`);
       byId.set(task._id, task);
@@ -350,7 +353,7 @@
     if (task.content !== title || task._projectId !== PROJECT_ID || task._scenariofieldconfigId !== SFC_ID) {
       throw new Error(`${label} 的标题、项目或 SFC 不匹配`);
     }
-    if (task.isDeleted !== false || task.isArchived !== false || task.isDone !== false) throw new Error(`${label} 不可写工时`);
+    if (task.isDeleted !== false || task.isDone !== false) throw new Error(`${label} 不可写工时`);
     if (requireStart && task._taskflowstatusId !== TFS_START_ID) throw new Error(`${label} 不是已验证的起始状态`);
     return task;
   }

@@ -187,7 +187,7 @@ async () => {
 | 操作 | 请求 | 关键返回字段与判定 |
 |---|---|---|
 | 日期聚合 | `POST /work-time-server/api/work-time/aggregation/dates`；body 见下例 | `ok`、`payload[].date`、`workTime`、`count`、`objects[]`；对象含 `_id`、`objectType`、`_objectId`、`workTime` |
-| 批量任务详情 | `POST /work-time-server/api/tasks/bulk`；body：`{"taskIds":["任务ID"]}` | 实际任务数组位于 `payload[]`；每项至少读取 `_id`、`content`、`_projectId`、`_scenariofieldconfigId`、`isDeleted`、`isArchived`、`isDone`、`_taskflowstatusId`；必须与请求 ID 对账 |
+| 批量任务详情 | `POST /work-time-server/api/tasks/bulk`；body：`{"taskIds":["任务ID"]}` | 实际任务数组位于 `payload[]`；每项至少读取 `_id`、`content`、`_projectId`、`_scenariofieldconfigId`、`isDeleted`、`isDone`、`_taskflowstatusId`；必须与请求 ID 对账。**`isArchived` 恒为 `null`**，接口不提供归档状态；归档校验必须用 GraphQL 的 `isArchived` 字段 |
 | 批量登记 | `POST /work-time-server/api/work-time/batch?from=task&taskId={任务ID}&_userId={用户ID}`；body 见下例 | `payload[]` 数量必须等于 `times`；逐条核对唯一非空 `_id`、`objectType=task`、`_objectId`、`date`、`workTime`，保存记录 ID；写后用日期聚合按记录核对 |
 | 删除工时 | `DELETE /work-time-server/api/work-time/{recordId}` | 要求 `ok=true` 且 `payload.isDeleted=true`；不可恢复 |
 
@@ -224,10 +224,13 @@ function reconcileBulkTasks(requestedIds, response) {
     for (const field of ["_projectId", "_scenariofieldconfigId", "_taskflowstatusId"]) {
       requireTeambitionId(task[field], `任务 ${task._id}.${field}`);
     }
-    for (const field of ["isDeleted", "isArchived", "isDone"]) {
+    for (const field of ["isDeleted", "isDone"]) {
       if (typeof task[field] !== "boolean") {
         throw new Error(`任务 ${task._id} 的 ${field} 缺失或不是 boolean`);
       }
+    }
+    if (task.isArchived !== undefined && task.isArchived !== null && typeof task.isArchived !== "boolean") {
+      throw new Error(`任务 ${task._id} 的 isArchived 必须是 boolean 或 null`);
     }
     byId.set(task._id, task);
   });
@@ -250,6 +253,8 @@ function reconcileBulkTasks(requestedIds, response) {
 ```
 
 `requestedIds` 会按首次出现顺序稳定去重。缺失 ID 仍会得到一条 `found: false` 的结果，其余字段为 `null`；不得从其他集合补猜状态，也不得用 `!value` 把缺失布尔字段归为未完成。
+
+**`tasks/bulk` 不返回归档状态**：实测 `isArchived` 恒为 `null`（响应中为 `"isArchived":null`），对账结果里 `isArchived: null` 不代表未归档，不能用于判断归档。归档校验必须使用 GraphQL 查询中的 `isArchived` 字段（该字段为 boolean）。涉及归档的写前校验、流程 D 的任务状态分类，都必须在 bulk 之外另取 GraphQL 数据。
 
 每日总工时与工时涉及任务状态查询都必须包含归档任务，因此通用日期聚合使用 `"task": {}`。只有用户明确要求排除归档任务时，才添加归档过滤。聚合响应必须严格校验：每个日期行具有经真实日历回验的 ISO 日期、非负安全整数 `workTime` / `count`、数组型 `objects`，且日期不得重复、`count === objects.length`、object 的 `workTime` 合计严格等于日期 `workTime`；每个 object 必须有无首尾空白的 24 位十六进制 `_id`、非空 `objectType` 和非负安全整数 `workTime`，task 类型还必须有同格式 `_objectId`。畸形行不得静默跳过。
 
@@ -375,10 +380,13 @@ async () => {
       for (const field of ["_projectId", "_scenariofieldconfigId", "_taskflowstatusId"]) {
         requireTeambitionId(task[field], `任务 ${task._id}.${field}`);
       }
-      for (const field of ["isDeleted", "isArchived", "isDone"]) {
+      for (const field of ["isDeleted", "isDone"]) {
         if (typeof task[field] !== "boolean") {
           throw new Error(`任务 ${task._id} 的 ${field} 缺失或不是 boolean`);
         }
+      }
+      if (task.isArchived !== undefined && task.isArchived !== null && typeof task.isArchived !== "boolean") {
+        throw new Error(`任务 ${task._id} 的 isArchived 必须是 boolean 或 null`);
       }
       byId.set(task._id, task);
     });
@@ -446,11 +454,13 @@ async () => {
       });
   const tasks = reconcileBulkTasks(taskIds, bulk);
 
+  // tasks/bulk 不返回 isArchived（恒为 null），归档无法从 bulk 判断；
+  // 要区分归档任务必须先按任务 ID 走 GraphQL 查 isArchived，本脚本不提供。
   return {
     taskIds,
-    completed: tasks.filter(task => task.found === true && task.isDeleted === false && task.isArchived === false && task.isDone === true),
-    incomplete: tasks.filter(task => task.found === true && task.isDeleted === false && task.isArchived === false && task.isDone === false),
-    archived: tasks.filter(task => task.found === true && task.isDeleted === false && task.isArchived === true),
+    completed: tasks.filter(task => task.found === true && task.isDeleted === false && task.isDone === true),
+    incomplete: tasks.filter(task => task.found === true && task.isDeleted === false && task.isDone === false),
+    archived: [],
     deleted: tasks.filter(task => task.found === true && task.isDeleted === true),
     unknown: tasks.filter(task => task.found === false),
   };
@@ -459,7 +469,7 @@ async () => {
 
 日期聚合在真实环境中曾返回 `YYYY-MM-DD`，也曾返回 `YYYY-MM-DDT00:00:00.000Z`。查询代码只接受这两类可证明等价的格式，并统一归一化为 `YYYY-MM-DD`；不要对任意字符串直接 `slice(0, 10)`。
 
-分类顺序为未知/缺失、已删除、已归档、已完成、未完成，命中前一类后不再进入后续类别。
+分类顺序为未知/缺失、已删除、已归档、已完成、未完成，命中前一类后不再进入后续类别。由于 `tasks/bulk` 不返回 `isArchived`，上述脚本只能可靠区分未知/已删除/已完成/未完成；要把“已归档”作为独立分类，必须再按任务 ID 走 GraphQL 查询归档字段，不能从 bulk 结果推断未归档。
 
 ## 创建任务
 
