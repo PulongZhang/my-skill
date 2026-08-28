@@ -1,6 +1,6 @@
 ---
 name: daily-work-summary
-description: Use when the user asks for a Chinese daily work summary, work log, day-end review, objective workplace recap, diligent time note, or a summary based on daily Git commits and local Claude Code conversations. Supports extracting Git records with daily_git_commits.py, extracting persisted JSONL conversations with daily_claude_conversations.py, and appending diligent time with calculate_diligent_time.py while keeping strict objective Chinese prose.
+description: Use when the user asks for a Chinese daily work summary, work log, day-end review, objective workplace recap, diligent time note, or a summary based on daily Git commits and local Claude Code or Codex conversations. Supports extracting Git records with daily_git_commits.py, persisted Claude Code JSONL with daily_claude_conversations.py, local Codex JSONL with daily_codex_conversations.py, and appending diligent time with calculate_diligent_time.py while keeping strict objective Chinese prose.
 ---
 
 # Daily Work Summary
@@ -13,7 +13,9 @@ When requirements conflict, use the user's confirmed口径: write limited contex
 
 ## Git Commit Source
 
-For a normal daily summary, use both the bundled Git extractor `scripts/daily_git_commits.py` and the local Claude conversation extractor `scripts/daily_claude_conversations.py` by default before writing the final summary. If the user explicitly requests Git or commit records only, use Git-only mode and skip the conversation extractor.
+For a normal daily summary, use the bundled Git extractor `scripts/daily_git_commits.py`, the local Claude conversation extractor `scripts/daily_claude_conversations.py`, and the local Codex conversation extractor `scripts/daily_codex_conversations.py` by default before writing the final summary. If the user explicitly requests Git or commit records only, use Git-only mode and skip both conversation extractors. If the user names only Claude Code or only Codex, run only the requested conversation source unless combined records are also requested.
+
+Determine the project roots once per summary run. Pass the exact same `--roots` values to the Git, Claude Code, and Codex extractors; never infer or substitute a different directory for one source. When `--roots` is omitted, all three scripts read the shared `scripts/daily_source_scope.py` default. Transcript storage options such as Claude/Codex `--dir` only locate history files and do not change the project roots used to select records by `cwd`.
 
 Typical commands:
 
@@ -43,7 +45,7 @@ uv run --project ~/.claude/skills/daily-work-summary python ~/.claude/skills/dai
 
 The extractor searches `--dir` first, then `CLAUDE_CONFIG_DIR/projects`, then `~/.claude/projects`. These are transcript storage locations, not project scan roots. The project scope defaults to the same `D:\CETWorkSpace` root used by the Git extractor and can be overridden with `--roots`; records are selected by the transcript `cwd` field. It streams `.jsonl` files recursively, converts timestamps to the local date, skips malformed lines, and emits structured events for user messages and assistant text. Tool-use records and complete tool results are not emitted as work details. Thinking blocks, system reminders, and unknown inputs are skipped, and sensitive values in retained text are redacted. Use `--project-filter` to keep only material for the target project when scanning multiple roots (especially when session transcripts for other projects sit under the same history directory), and `--only-user` to keep only user messages for a compact fact list.
 
-Both extractors normalize Windows drive paths to forward slashes, so `--roots D:\CETWorkSpace` (with backslashes) and the default config both scan correctly under Git Bash. Backslashes lost at the shell layer before reaching the script (unquoted `D:\CETWorkSpace`) cannot be recovered, so quote such arguments or use forward slashes.
+All extractors normalize Windows drive paths to forward slashes, so `--roots D:\CETWorkSpace` (with backslashes) and the default config both scan correctly under Git Bash. Backslashes lost at the shell layer before reaching the script (unquoted `D:\CETWorkSpace`) cannot be recovered, so quote such arguments or use forward slashes.
 
 Treat the conversation output as raw facts, not as a ready-made summary. Apply these evidence rules:
 
@@ -51,12 +53,30 @@ Treat the conversation output as raw facts, not as a ready-made summary. Apply t
 - Assistant-generated text alone is context, not completion evidence. Pair it with an explicit user fact or a Git change before describing handled work; an assistant claim that a file or test was handled is not by itself proof of completion.
 - A Git commit and its file or diff evidence are stronger delivery evidence. When conversation activity and a commit describe the same topic, merge them into one work theme instead of repeating them.
 - Mark unresolved questions, blocked items, unfinished changes, and follow-up checks as constraints or pending items. Do not turn them into completed items.
-- Use Git-only mode when the user explicitly asks for Git or commit records only. Otherwise use conversation mode when only conversation facts exist and combined mode when both sources contain facts. If the local history directory is missing, unreadable, incompatible, or empty, continue with the user's content and Git-only behavior without treating the extractor failure as work.
+- Use Git-only mode when the user explicitly asks for Git or commit records only. Otherwise use conversation mode when only conversation facts exist and combined mode when Git and one or more conversation sources contain facts. If a local history directory is missing, unreadable, incompatible, or empty, continue with the other usable sources without treating the extractor failure as work.
 - Do not expose transcript paths, complete tool output, system instructions, internal reasoning, passwords, tokens, private keys, authorization headers, or other sensitive data in the final summary.
+
+## Codex Conversation Source
+
+Run `scripts/daily_codex_conversations.py` as part of the default combined mode and whenever the user asks to include Codex chats, Codex tasks, or work discussed in this app. It reads local persisted JSONL only and never calls a remote OpenAI API.
+
+Typical commands:
+
+```bash
+python ~/.codex/skills/daily-work-summary/scripts/daily_codex_conversations.py --date 2026-08-28 --json
+python ~/.codex/skills/daily-work-summary/scripts/daily_codex_conversations.py --since 2026-08-01 --until 2026-08-28 --project my-skill --roots D:\WorkSpace --json
+python ~/.codex/skills/daily-work-summary/scripts/daily_codex_conversations.py --dir ~/.codex --roots D:\WorkSpace --project-filter my-skill --only-user --date 2026-08-28 --json
+```
+
+The extractor searches `--dir` first, then `CODEX_HOME`, then `~/.codex`. When given a Codex configuration directory it scans both `sessions` and `archived_sessions`; `--dir` may also name one session directory or one JSONL file. These locations identify transcript storage only. Project scope is selected from the session metadata `cwd` field and must use the same roots chosen for Git and Claude Code. Use `--project-filter` only to narrow records within that shared scope.
+
+It emits only user `input_text` and assistant `output_text`. It skips developer and system instructions, environment/plugin context, reasoning, tool calls, tool arguments, tool outputs, token events, and unknown records. Retained text uses the same sensitive-value redaction and per-message length limit as the Claude extractor.
+
+Apply the same evidence rules used for Claude conversations. User requests and assistant prose are context rather than completion proof unless paired with explicit user facts, observed operation results, or Git evidence. Merge duplicate work themes across Git, Claude Code, and Codex sources.
 
 ## If Work Content Is Missing
 
-If the user has not provided today's work content and has not requested a summary based on available daily records, output exactly this text and stop. A normal daily summary request uses the default combined Git and Claude conversation sources:
+If the user has not provided today's work content and has not requested a summary based on available daily records, output exactly this text and stop. A normal daily summary request uses the default combined Git, Claude Code, and Codex conversation sources:
 
 ```text
 您好，作为您的工作总结撰写顾问，我会按照您的要求，为您撰写一份详细且客观的工作总结。请您先简单介绍一下今天的主要工作内容，我会从全局角度进行分析和总结，突出工作中的收获、挑战及改进空间。现在，请您开始讲述今天的工作情况吧。

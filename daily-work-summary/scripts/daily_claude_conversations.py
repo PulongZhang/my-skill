@@ -27,6 +27,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
+from daily_source_scope import DEFAULT_PROJECT_ROOTS
+
 
 def _configure_stdio() -> None:
     """在 Windows 控制台中保持中文帮助和报告可读。"""
@@ -42,8 +44,6 @@ _configure_stdio()
 
 
 DEFAULT_MAX_CHARS_PER_MESSAGE = 2000
-# 与 daily_git_commits.py 的默认扫描根目录保持一致。
-DEFAULT_PROJECT_ROOTS = [r"D:\CETWorkSpace"]
 SOURCE_NAME = "local_claude_jsonl"
 
 _TIMESTAMP_RE = re.compile(r'"timestamp"\s*:\s*"([^"]+)"')

@@ -22,6 +22,8 @@ import argparse
 from datetime import datetime, timedelta
 from collections import defaultdict
 
+from daily_source_scope import DEFAULT_PROJECT_ROOTS, normalize_project_roots
+
 # 解决 Windows 控制台 GBK 编码问题
 if sys.stdout.encoding != "utf-8":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -35,10 +37,7 @@ if sys.stderr.encoding != "utf-8":
 GIT_AUTHOR = "zhangpulong"
 
 # 要扫描的根目录列表，脚本会递归查找其中所有 Git 仓库
-SCAN_ROOTS = [
-    r"D:\CETWorkSpace",
-    # 如需添加更多目录，在此处追加即可
-]
+SCAN_ROOTS = list(DEFAULT_PROJECT_ROOTS)
 
 # 最大递归深度（避免扫描过深）
 MAX_DEPTH = 8
@@ -52,12 +51,7 @@ def normalize_paths(paths):
     Git Bash 下子进程以字符串方式接收参数，`D:\CETWorkSpace` 这类反斜杠路径
     会被吞掉反斜杠变成 `D:CETWorkSpace`，导致目录扫描为空。统一转为 `D:/CETWorkSpace`。
     """
-    normalized = []
-    for p in paths:
-        if re.match(r"^[A-Za-z]:[\\/]", p):
-            p = p.replace("\\", "/")
-        normalized.append(p)
-    return normalized
+    return normalize_project_roots(paths)
 
 
 def find_git_repos(roots, max_depth=MAX_DEPTH):
