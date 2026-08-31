@@ -21,15 +21,18 @@
 
 Chrome DevTools 登录门禁：
 
-1. 用 `mcp__chrome-devtools__list_pages` 找到受控页面；必要时用 `mcp__chrome-devtools__navigate_page` 打开 Teambition 同源地址。
-2. 若页面仍在 `/login`，停止，等待用户完成登录，不尝试提取认证信息。
-3. 登录后，把完整函数声明传给 `mcp__chrome-devtools__evaluate_script`。每次调用都自包含配置和 helper，不依赖前一次调用留下的全局变量。
+1. 先读取目标项目参考并确定实际 origin；内网部署不得默认打开 `www.teambition.com`。用户明确指定 MCP Chrome 时，先发现 `mcp__chrome_devtools__*`（部分环境显示为 `mcp__chrome-devtools__*`）工具，不要改用内置浏览器。
+2. 用 `list_pages` 找到受控页面；必要时仅在空白页用 `navigate_page` 打开已确认的 Teambition 同源地址。
+3. 若页面仍在 `/login`，停止，等待用户完成登录，不尝试提取认证信息。不同浏览器表面可能使用不同会话，必须在当前 MCP Chrome 页面重新核对。
+4. 登录后，把完整函数声明传给 `evaluate_script`。每次调用都自包含配置和 helper，不依赖前一次调用留下的全局变量。
 
 `evaluate_script` 使用 `async () => { ... }` 函数声明；F12 Console 则使用完整 IIFE：`(async () => { ... })();`。两者都必须把配置、请求封装、查询和返回值放在同一次执行中。
 
 ## GraphQL：全量查询执行者的未完成任务
 
 `project` 不是合法 TQL 字段。必须先完成组织级全分页，再按 `node.project.id` 本地过滤；最终还要排除删除、归档和完成任务。以下函数可直接传给 `mcp__chrome-devtools__evaluate_script`，返回值仅包含可 JSON 序列化数据：
+
+当前部署中，`content = "准确标题"` 会被 TQL 转换到不兼容的文本字段并返回 GraphQL 错误，不能用它判断任务不存在。若用户指定的任务不在本人未完成任务集合中，优先使用准确任务 ID；没有 ID 时可按项目任务列表或已知执行者查询，再在本地做标题精确匹配。任何扩展查询仍须检查 `hasNextPage` / `endCursor`；游标无进展时结果不完整，只能使用已经精确命中的唯一任务，不能把未命中当作不存在或据此创建任务。
 
 ```javascript
 async () => {
@@ -273,7 +276,7 @@ function reconcileBulkTasks(requestedIds, response) {
 }
 ```
 
-登记工时请求；`time` 单位为毫秒，可在一次请求的 `times` 中按日期提交多条。成功响应的 `payload[]` 必须与 `times` 一一对应，并包含可核验的 `_id`、`objectType`、`_objectId`、`date`、`workTime`；字段缺失、记录数不符或记录 ID 重复时视为失败/未知。写后日期聚合必须按这些记录 ID 核对任务、日期和时长，同时核对 `count` 与新增记录数。每日总量只有严格等于目标值才成功，超过目标值必须报告超额或并发冲突：
+登记工时请求；`time` 单位为毫秒，可在一次请求的 `times` 中提交多天，也可以为同一任务、同一日期提交多条不同工作切片。当前部署会为每个 `times` 项创建一条独立记录，并按输入顺序返回 `payload[]`。因此校验必须按索引逐项比较请求与响应，不能用 `Map(date -> time)`、日期集合或日期去重；这些写法会覆盖或拒绝同日切片。成功响应的 `payload[]` 必须与 `times` 一一对应，并包含可核验的 `_id`、`objectType`、`_objectId`、`date`、`workTime`；字段缺失、记录数不符或记录 ID 重复时视为失败/未知。写后日期聚合必须按这些记录 ID 核对任务、日期和时长，同时核对 `count` 与新增记录数。每日总量只有严格等于目标值才成功，超过目标值必须报告超额或并发冲突：
 
 ```json
 {
@@ -282,8 +285,33 @@ function reconcileBulkTasks(requestedIds, response) {
   "objectType": "task",
   "tagIds": [],
   "times": [
-    { "date": "2026-07-01", "time": 3600000, "description": "实际工作说明" }
+    { "date": "2026-07-01", "time": 3600000, "description": "工作切片一" },
+    { "date": "2026-07-01", "time": 7200000, "description": "工作切片二" }
   ]
+}
+```
+
+同日切片校验示意：
+
+```javascript
+function validateBatchRecords(request, result) {
+  if (!Array.isArray(result.payload) || result.payload.length !== request.times.length) {
+    throw new Error("工时 batch 返回记录数与 times 数量不符");
+  }
+  const ids = new Set();
+  return result.payload.map((record, index) => {
+    const desired = request.times[index];
+    if (!record || typeof record !== "object" || Array.isArray(record)) throw new Error(`payload[${index}] 不是对象`);
+    requireTeambitionId(record._id, `payload[${index}]._id`);
+    if (ids.has(record._id)) throw new Error(`工时 batch 重复记录 ID ${record._id}`);
+    ids.add(record._id);
+    const date = normalizeApiDate(record.date, `payload[${index}].date`);
+    if (record.objectType !== "task" || record._objectId !== request.taskId ||
+        date !== desired.date || record.workTime !== desired.time) {
+      throw new Error(`payload[${index}] 与 times[${index}] 不匹配`);
+    }
+    return { id: record._id, taskId: request.taskId, date, time: record.workTime };
+  });
 }
 ```
 

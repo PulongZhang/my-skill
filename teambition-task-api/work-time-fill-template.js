@@ -511,19 +511,17 @@
 
   function validateBatchRecords(request, result) {
     if (result.payload.length !== request.times.length) throw new Error('工时 batch 返回记录数与 times 数量不符');
-    const desired = new Map(request.times.map((time) => [time.date, time]));
     const ids = new Set();
-    const dates = new Set();
     return result.payload.map((record, index) => {
+      const desired = request.times[index];
       assertObject(record, `工时 batch payload[${index}]`);
       requireId(record._id, `工时 batch payload[${index}]._id`);
       if (ids.has(record._id)) throw new Error(`工时 batch 重复记录 ID ${record._id}`);
       ids.add(record._id);
       if (record.objectType !== 'task' || record._objectId !== request.taskId) throw new Error(`工时记录 ${record._id} 任务不匹配`);
       const date = normalizeApiDate(record.date, `工时记录 ${record._id}.date`);
-      if (dates.has(date) || !desired.has(date)) throw new Error(`工时记录 ${record._id} 日期不匹配`);
-      dates.add(date);
-      if (!Number.isSafeInteger(record.workTime) || record.workTime !== desired.get(date).time) {
+      if (date !== desired.date) throw new Error(`工时记录 ${record._id} 日期与 times[${index}] 不匹配`);
+      if (!Number.isSafeInteger(record.workTime) || record.workTime !== desired.time) {
         throw new Error(`工时记录 ${record._id} 时长不匹配`);
       }
       return { id: record._id, taskId: request.taskId, date, time: record.workTime };
