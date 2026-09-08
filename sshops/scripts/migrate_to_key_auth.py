@@ -4,9 +4,8 @@
 迁移服务器从密码认证到密钥认证
 
 更新 SSH config：
-1. 移除 password 字段
+1. 移除 password 字段（密码不迁移到 tags；tags 会被 list/find 明文输出）
 2. 添加 IdentityFile 配置
-3. 将密码保存到 tags 中（格式：pwd:原密码）
 """
 
 import sys
@@ -81,21 +80,17 @@ def migrate_to_key_auth(alias, key_file):
         print(f"警告: {alias} 没有配置密码，可能已经是密钥认证")
         return False
 
-    # 更新 tags：添加 pwd:密码
-    if password_value:
-        tags_value.append(f"pwd:{password_value}")
+    # 移除 password 行（密码不得转移到 tags 等会被 list/find 输出的字段）
+    lines[password_index] = ''
 
-    # 移除 password 行
-    if password_index != -1:
-        lines[password_index] = ''
-
-    # 更新 tags 行
+    # 清理历史版本写入 tags 的 pwd:<密码> 条目（若有）
     if tags_index != -1:
-        lines[tags_index] = f"# tags: {','.join(tags_value)}\n"
-    else:
-        # 在 Host 行前添加 tags
-        lines.insert(host_index, f"# tags: {','.join(tags_value)}\n")
-        host_index += 1
+        cleaned_tags = [t for t in tags_value if not t.lower().startswith('pwd:')]
+        if cleaned_tags != tags_value:
+            if cleaned_tags:
+                lines[tags_index] = f"# tags: {','.join(cleaned_tags)}\n"
+            else:
+                lines[tags_index] = ''
 
     # 查找 Host 块的结束位置
     host_end = host_index + 1
@@ -126,7 +121,7 @@ def migrate_to_key_auth(alias, key_file):
 
     print(f"✓ 已将 {alias} 迁移到密钥认证")
     print(f"  - 密钥文件: ~/.ssh/{key_file}")
-    print(f"  - 原密码已保存到 tags 中")
+    print(f"  - 密码已从 SSH config 中移除；如需保留请自行备份到安全位置")
 
     return True
 
@@ -137,8 +132,13 @@ def main():
     parser = argparse.ArgumentParser(description='迁移服务器从密码认证到密钥认证')
     parser.add_argument('alias', help='服务器别名')
     parser.add_argument('--key-file', required=True, help='密钥文件名（如 id_rsa_sa_legacy）')
+    parser.add_argument('--confirm', action='store_true',
+                        help='确认移除 SSH config 中的密码字段')
 
     args = parser.parse_args()
+
+    if not args.confirm:
+        parser.error('迁移会移除 SSH config 中的密码字段；确认后请显式添加 --confirm')
 
     success = migrate_to_key_auth(args.alias, args.key_file)
 

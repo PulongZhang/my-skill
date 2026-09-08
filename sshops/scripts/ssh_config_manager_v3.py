@@ -114,20 +114,25 @@ class SSHConfigManager:
         self._ensure_config_permissions()
 
     def _ensure_config_permissions(self):
+        self._restrict_file_permissions(self.config_path, 'SSH config')
+
+    @staticmethod
+    def _restrict_file_permissions(path: str, label: str):
+        """仅当前用户可读写（用于包含凭据的文件）。"""
         if os.name != 'nt':
-            os.chmod(self.config_path, 0o600)
+            os.chmod(path, 0o600)
             return
         # Remove inherited ACLs and keep read access for the logged-in user only.
         import subprocess
         username = os.environ.get('USERNAME')
         if not username:
-            raise RuntimeError('无法确定 Windows 当前用户名，拒绝写入包含凭据的 SSH config')
+            raise RuntimeError(f'无法确定 Windows 当前用户名，拒绝写入包含凭据的 {label}')
         result = subprocess.run(
-            ['icacls', self.config_path, '/inheritance:r', '/grant:r', f'{username}:(R,W)'],
+            ['icacls', path, '/inheritance:r', '/grant:r', f'{username}:(R,W)'],
             capture_output=True, text=True, check=False
         )
         if result.returncode != 0:
-            raise RuntimeError(f'无法限制 SSH config 权限: {result.stderr.strip()}')
+            raise RuntimeError(f'无法限制 {label} 权限: {result.stderr.strip()}')
 
     def parse_metadata_from_comments(self, comment_lines: List[str]) -> dict:
         """
@@ -770,9 +775,12 @@ class SSHConfigManager:
 
         return results
 
-    def export_config(self) -> dict:
+    def export_config(self, include_passwords: bool = False) -> dict:
         """
         导出所有配置（用于备份）
+
+        Args:
+            include_passwords: 是否包含密码（默认剔除，连同 pwd:<密码> tag 一起）
 
         Returns:
             配置字典
@@ -788,6 +796,10 @@ class SSHConfigManager:
         for alias, metadata, _, _ in hosts_with_metadata:
             config = self.get_host_config(alias)
 
+            if not include_passwords:
+                metadata = {k: v for k, v in metadata.items() if k != 'password'}
+                metadata['tags'] = _visible_tags(metadata.get('tags'))
+
             host_data = {
                 "alias": alias,
                 "hostname": config.get('hostname'),
@@ -801,6 +813,11 @@ class SSHConfigManager:
             export_data['hosts'].append(host_data)
 
         return export_data
+
+
+def _visible_tags(tags) -> List[str]:
+    """历史版本会把密码写进 pwd: 前缀的 tag；此类值不得出现在常规输出中。"""
+    return [t for t in (tags or []) if not str(t).lower().startswith('pwd:')]
 
 
 def _get_auth_method(config, meta) -> str:
@@ -860,7 +877,7 @@ def cmd_list_servers(args):
                 'user': config.get('user'),
                 'port': config.get('port', 22),
                 'description': meta.get('description', ''),
-                'tags': meta.get('tags', []),
+                'tags': _visible_tags(meta.get('tags')),
                 'location': meta.get('location', ''),
                 'auth': _get_auth_method(config, meta),
             })
@@ -902,7 +919,7 @@ def cmd_find(args):
                 'port': config.get('port', 22),
                 'environment': meta.get('environment', 'unknown'),
                 'description': meta.get('description', ''),
-                'tags': meta.get('tags', []),
+                'tags': _visible_tags(meta.get('tags')),
                 'location': meta.get('location', '')
             })
 
@@ -1043,11 +1060,15 @@ def cmd_export(args):
     """导出配置"""
     try:
         manager = SSHConfigManager()
-        export_data = manager.export_config()
+        export_data = manager.export_config(include_passwords=args.include_passwords)
 
         if args.output:
             with open(args.output, 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, ensure_ascii=False, indent=2)
+
+            if args.include_passwords:
+                # 导出文件包含明文密码，权限收紧为仅当前用户可读写。
+                manager._restrict_file_permissions(args.output, '导出文件')
 
             print(json.dumps({
                 'success': True,
@@ -1116,6 +1137,8 @@ def main():
     # export 命令
     export_parser = subparsers.add_parser('export', help='导出配置')
     export_parser.add_argument('--output', help='输出文件路径')
+    export_parser.add_argument('--include-passwords', action='store_true',
+                               help='导出包含密码（默认剔除；写入文件时自动收紧权限）')
 
     args = parser.parse_args()
 

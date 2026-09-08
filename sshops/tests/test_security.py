@@ -12,6 +12,7 @@ from deploy_pubkey import _validate_public_key
 from security import (is_dangerous_command, quote_posix_shell_arg,
                       validate_ssh_config_value)
 from sftp_transfer import SFTPTransfer
+from ssh_config_manager_v3 import _visible_tags
 
 
 class SecurityHelperTests(unittest.TestCase):
@@ -33,6 +34,10 @@ class SecurityHelperTests(unittest.TestCase):
             _validate_public_key("ssh-ed25519 aGVsbG8= comment\nrm -rf /")
         with self.assertRaises(ValueError):
             _validate_public_key("ssh-ed25519 not-base64!")
+
+    def test_pwd_tags_hidden_from_listing(self):
+        self.assertEqual(_visible_tags(['web', 'pwd:secret-value']), ['web'])
+        self.assertEqual(_visible_tags(None), [])
 
 
 class Entry:

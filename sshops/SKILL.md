@@ -235,9 +235,9 @@ uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scrip
 uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" update <别名> --key ~/.ssh/id_ed25519
 ```
    双模式下脚本实际走密码认证（Paramiko 优先密码），密钥处于待命状态；`list-servers` 认证方式显示「密码+密钥」。
-4. 仅当用户**明确要求纯密钥登录**时，才执行迁移（移除密码字段）：
+4. 仅当用户**明确要求纯密钥登录**时，才执行迁移（直接删除密码字段，不转存 tags；如需保留密码请先让用户自行备份）：
 ```bash
-uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/migrate_to_key_auth.py" <别名> --key-file id_ed25519
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/migrate_to_key_auth.py" <别名> --key-file id_ed25519 --confirm
 ```
 5. 再次执行步骤 4 验证。
 
