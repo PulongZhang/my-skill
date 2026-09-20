@@ -13,6 +13,41 @@ const targetNotesDir = args[1] ? resolve(args[1]) : resolve(__dirname, '../.agen
 
 const LIFECYCLES = ['implemented', 'proposed', 'rejected', 'archived'];
 
+/** 去掉双语切换行，并把 `.zh.md` 相对链接归一化为 `.md`——本 skill 是中文单语宿主。 */
+function normalizeBilingual(content: string): string {
+  return content
+    .replace(/^\[English\]\([^)]+\)\s*\|\s*中文\s*\n+/m, '')
+    .replace(/^English\s*\|\s*\[中文\]\([^)]+\)\s*\n+/m, '')
+    .replace(/^\[English\]\([^)]+\)\s*\n+/m, '')
+    .replace(/\]\(([^)#]+)\.zh\.md([#)])/g, ']($1.md$2');
+}
+
+// 格式门禁只认英文头块，这两个 token 保持英文原文；标题里的全角冒号归一半角。
+const ENGLISH_STATUS = new Map([
+  ['已实现', 'implemented'],
+  ['implemented', 'implemented'],
+  ['提议', 'proposed'],
+  ['proposed', 'proposed'],
+  ['已否决', 'rejected'],
+  ['rejected', 'rejected'],
+]);
+
+/** 中文稿把「状态：已实现」这类行译了出去；门禁要的是英文状态行。 */
+function normalizeHeaderTokens(content: string): string {
+  return content
+    .replace(/^(# Agent Note)[:：][ \t]*/m, '$1: ')
+    .replace(/^状态[:：]\s*(.+)$/gm, (line, raw: string) => {
+      const tail = raw.trim();
+      const word = tail.split(/[—－]/)[0]?.trim() ?? '';
+      const english = ENGLISH_STATUS.get(word);
+      if (english === undefined) return line;
+      // 拒绝原因保持原样附在英文词之后，其余状态丢弃多余说明——状态行不带括号补充。
+      return english === 'rejected' && tail !== word
+        ? `Status: rejected — ${tail.replace(/^[^—－]+[—－]\s*/, '')}`
+        : `Status: ${english}`;
+    });
+}
+
 if (!existsSync(dshNotesDir)) {
   console.error(`❌ Source dsh notes not found at: ${dshNotesDir}`);
   process.exit(1);
@@ -56,25 +91,19 @@ for (const [cleanRel, sourcePath] of noteMap.entries()) {
 
   let content = readFileSync(sourcePath, 'utf8');
 
-  // 1. 去除多余的双语切换条目，例如 `[English](xxx.md) | 中文` 或 `English | [中文](xxx.zh.md)`
-  content = content.replace(/^\[English\]\([^)]+\)\s*\|\s*中文\s*\n+/m, '');
-  content = content.replace(/^English\s*\|\s*\[中文\]\([^)]+\)\s*\n+/m, '');
-  content = content.replace(/^\[English\]\([^)]+\)\s*\n+/m, '');
-
-  // 2. 将文内所有的 `.zh.md` 相对链接归一化为标准的 `.md`（包括带有 #anchor 的链接）
-  content = content.replace(/\]\(([^)#]+)\.zh\.md([#)])/g, ']($1.md$2');
+  // 去掉双语切换行、归一化 `.zh.md` 链接、把中文头块 token 换回英文
+  content = normalizeHeaderTokens(normalizeBilingual(content));
 
   writeFileSync(destPath, content, 'utf8');
   copied++;
 }
 
-// 拷贝 README.md 和 AGENTS.md 到 .agents/notes 根目录供相对跳转
-for (const topDoc of ['README.zh.md', 'README.md', 'AGENTS.md']) {
-  const p = join(dshNotesDir, topDoc);
-  if (existsSync(p)) {
-    let topContent = readFileSync(p, 'utf8').replace(/\]\(([^)#]+)\.zh\.md([#)])/g, ']($1.md$2');
-    writeFileSync(join(targetNotesDir, topDoc === 'README.zh.md' ? 'README.md' : topDoc), topContent, 'utf8');
-  }
+// README / AGENTS.md 供笔记间相对跳转；README 只取中文版——
+// 英文版会被中文版覆盖成自指的切换行（`English | [中文](README.md)`）。
+for (const [src, dest] of [['README.zh.md', 'README.md'], ['AGENTS.md', 'AGENTS.md']] as const) {
+  const p = join(dshNotesDir, src);
+  if (!existsSync(p)) continue;
+  writeFileSync(join(targetNotesDir, dest), normalizeHeaderTokens(normalizeBilingual(readFileSync(p, 'utf8'))), 'utf8');
 }
 
 console.log(`✅ 成功将 ${copied} 篇中文 Note 标准化写入到: ${targetNotesDir}`);

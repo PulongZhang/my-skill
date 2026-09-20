@@ -223,7 +223,7 @@ npx tsx scripts/check-note-anchors.ts
 {
   "scripts": {
     "verify-notes": "npx tsx scripts/verify-agent-note-tree.ts && npx tsx scripts/verify-agent-note-format.ts && npx tsx scripts/verify-archived-agent-notes.ts",
-    "archive-note": "npx tsx scripts/archive-agent-note.ts"
+    "archive-agent-note": "npx tsx scripts/archive-agent-note.ts"
   }
 }
 ```

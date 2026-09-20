@@ -53,6 +53,8 @@ Status: <状态>
 
 每篇 Note 必含 `## Alternatives considered`：每个**真考虑过**的备选为何没选，一段一备选（可用 `### Why not <X>?` 子节）。没有过的选项不要编。「不做 / 复用现状」仅当当时真的权衡过才写。脚本只检查这一节在不在。
 
+唯一例外是从 DSH 导入的历史语料：备选确实无从考据时，用逐字一行 `<!-- agent-note-format: alternatives-not-recorded (pre-format Agent Note) -->` 代替，且只对 `2026-07-05` 之前提出的笔记有效——新笔记写这行会被脚本拒。
+
 ## 时态与禁止改写
 
 - `proposed` 可用将来时；`implemented` 一律现在时，描述已落地事实。

@@ -1,7 +1,8 @@
 /**
  * Enforce Agent Note headers, lifecycle-specific sections, alternatives.
  * Implemented notes may not carry proposal-era H2s; present tense in the
- * body is a prose rule, not a lexical scan.
+ * body is a prose rule, not a lexical scan. A pre-format (imported) note
+ * may carry the legacy alternatives comment instead of the section.
  * Run: npx tsx scripts/verify-agent-note-format.ts
  */
 import { readFileSync } from "node:fs";
@@ -14,6 +15,12 @@ const STATUS: Record<string, RegExp> = {
   rejected: /^Status: rejected — .+$/,
 };
 
+/** 导入的历史语料：文件名日期早于此值时，才允许用整行注释代替 `## Alternatives considered`。 */
+const PRE_FORMAT_CUTOFF = "2026-07-05";
+
+/** 早期笔记（备选确实无从考据）替代必填小节的那行注释；整行逐字匹配。 */
+const LEGACY_ALTERNATIVES_COMMENT = "<!-- agent-note-format: alternatives-not-recorded (pre-format Agent Note) -->";
+
 const PROBLEM_FIRST = ["## Problem", "## 问题"];
 
 const REQUIRED: Record<string, string[][]> = {
@@ -24,7 +31,7 @@ const REQUIRED: Record<string, string[][]> = {
   ],
   implemented: [
     ["## Decision", "## 决定", "## 决策"],
-    ["## Consequences", "## 后果", "## 影响", "## 结果"],
+    ["## Consequences", "## 后果", "## 影响", "## 结果", "## 结果与代价"],
   ],
   rejected: [
     ["## Proposal", "## 提议", "## 方案", "## 提案"],
@@ -139,7 +146,14 @@ for (const note of notes) {
   }
 
   if (!bases.some((h: string) => ALTERNATIVES_RE.test(h))) {
-    fail("missing ## Alternatives considered / ## 备选方案");
+    // 导入的历史语料可能带着这行注释——只在 cutoff 之前提出的笔记上放行，
+    // 否则它就成了绕开必填小节的漏洞。
+    const grandfather = lines.some((l, i) => !src.fenced[i] && l.trim() === LEGACY_ALTERNATIVES_COMMENT);
+    if (grandfather && note.date >= PRE_FORMAT_CUTOFF) {
+      fail(`legacy alternatives comment is only valid for notes dated before ${PRE_FORMAT_CUTOFF}`);
+    } else if (!grandfather) {
+      fail("missing ## Alternatives considered / ## 备选方案");
+    }
   }
 }
 
