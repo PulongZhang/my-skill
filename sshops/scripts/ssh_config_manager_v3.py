@@ -67,6 +67,8 @@ import os
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_script_dir, 'lib'))
 from security import validate_port, validate_ssh_config_value
+from ssh_config_format import (detect_newline, format_config_file,
+                               render_directive_lines, render_metadata_lines)
 import json
 import argparse
 import re
@@ -337,50 +339,36 @@ class SSHConfigManager:
         if self.get_host_config(alias) is not None:
             raise ValueError(f"别名 '{alias}' 已存在")
 
-        # 构建注释元数据块
-        comment_lines = [
-            f"\n# ===== {alias} =====\n"
-        ]
-
-        if description:
-            comment_lines.append(f"# description: {description}\n")
-
-        if environment:
-            comment_lines.append(f"# environment: {environment}\n")
-
-        if tags:
-            comment_lines.append(f"# tags: {','.join(tags)}\n")
-
-        if location:
-            comment_lines.append(f"# location: {location}\n")
-
-        if password:
-            comment_lines.append(f"# password: {password}\n")
-
+        # 构建注释元数据块（字段顺序与空值省略由 lib/ssh_config_format.py 定义）
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        comment_lines.append(f"# created_at: {now}\n")
-        comment_lines.append(f"# updated_at: {now}\n")
+        metadata = {
+            'description': description,
+            'environment': environment,
+            'tags': tags or [],
+            'location': location,
+            'password': password,
+            'created_at': now,
+            'updated_at': now,
+        }
 
-        # 构建配置块
-        config_lines = [
-            f"Host {alias}\n",
-            f"    HostName {hostname}\n",
-            f"    User {user}\n",
-        ]
-
+        # 构建配置块（Port 22 自动省略，IdentityFile 自动归一为 ~/.ssh/ 形式）
+        extra = {'hostname': hostname, 'user': user}
         if port != 22:
-            config_lines.append(f"    Port {port}\n")
-
+            extra['port'] = str(port)
         if identity_file:
-            config_lines.append(f"    IdentityFile {identity_file}\n")
-
+            extra['identityfile'] = identity_file
         if proxy_jump:
-            config_lines.append(f"    ProxyJump {proxy_jump}\n")
+            extra['proxyjump'] = proxy_jump
 
-        # 添加到 config 文件
-        with open(self.config_path, 'a', encoding='utf-8') as f:
-            f.writelines(comment_lines)
-            f.writelines(config_lines)
+        # 追加到 config 文件（沿用文件现有行尾风格）
+        with open(self.config_path, 'r', encoding='utf-8', newline='') as f:
+            newline = detect_newline(f.read())
+        new_lines = render_metadata_lines(alias, metadata, [], newline)
+        new_lines.append(f"Host {alias}{newline}")
+        new_lines.extend(render_directive_lines([], newline=newline, extra=extra))
+
+        with open(self.config_path, 'a', encoding='utf-8', newline='') as f:
+            f.writelines(new_lines)
 
         return True
 
@@ -490,6 +478,7 @@ class SSHConfigManager:
                     )
                     new_lines.extend(updated_config)
 
+                    # 更新落盘后由 _normalize_file 统一回写为标准格式
                     continue
                 else:
                     # 不是目标 Host，保留收集的注释和这个 Host
@@ -511,9 +500,10 @@ class SSHConfigManager:
             return False
 
         # 写回文件
-        with open(self.config_path, 'w', encoding='utf-8') as f:
+        with open(self.config_path, 'w', encoding='utf-8', newline='') as f:
             f.writelines(new_lines)
 
+        self._normalize_file()
         return True
 
     def _update_metadata_comments(self, comment_lines: List[str], alias: str,
@@ -692,10 +682,15 @@ class SSHConfigManager:
         new_lines.extend(skip_comments)
 
         # 写回文件
-        with open(self.config_path, 'w', encoding='utf-8') as f:
+        with open(self.config_path, 'w', encoding='utf-8', newline='') as f:
             f.writelines(new_lines)
 
+        self._normalize_file()
         return True
+
+    def _normalize_file(self):
+        """把整份 config 收敛到标准格式（幂等；CI 门禁用同一实现）。"""
+        format_config_file(self.config_path)
 
     def find_host(self, query: str) -> List[Tuple[str, dict, dict]]:
         """

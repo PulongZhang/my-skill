@@ -1,12 +1,12 @@
 ---
 name: sshops
-version: 3.5.0
+version: 3.6.0
 description: "CRITICAL: Use this skill for ALL SSH/server operations. NEVER run raw ssh/scp directly. Triggers: SSH, remote server, server IP/hostname/user@host, connect/login, run command on server, check server/status, deploy, upload/download, file transfer, bastion/jump host, server-to-server transfer, migrate, tunnel, port forward, database/internal service access, and Chinese terms: 服务器, 远程, 连接, 登录, 上传, 下载, 部署, 跳板机, 服务器间传输, 迁移, 隧道, 端口转发, 数据库连接, 内网访问. Provides persistent connections, pooling, jump hosts, SFTP, tunneling, and recovery. DO NOT use for local commands, localhost, or current-directory work."
 allowed-tools: Bash, Read, Write, Glob
 keywords: SSH,服务器,远程,连接,命令,上传,下载,文件传输,跳板机,批量,集群,deploy,部署,运维,登录,执行,查看,检查,管理,操作,访问,传输,迁移,服务器间,tunnel,隧道,端口转发,数据库,内网
 ---
 
-# SSH Skill v3.5.0
+# SSH Skill v3.6.0
 
 高性能 SSH 操作技能，支持守护进程长连接、自动连接复用、跳板机、批量并发、服务器间直接传输、自动错误恢复。
 
@@ -41,7 +41,7 @@ uv run --project ~/.claude/skills/sshops python ~/.claude/skills/sshops/scripts/
 
 展示 SSH Skill 的帮助文档。以 Markdown 格式输出以下内容：
 
-**SSH Skill v3.5.0 - 高性能 SSH 操作技能**
+**SSH Skill v3.6.0 - 高性能 SSH 操作技能**
 
 **核心特点：**
 - 守护进程长连接：首次连接后自动启动守护进程，后续命令响应时间从 ~0.45s 降至 ~0.12s
@@ -383,7 +383,20 @@ uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scrip
 
 # 删除配置
 uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/ssh_config_manager_v3.py" delete <别名>
+
+# 规范化 config 格式（幂等：符合规范时不产生任何改动）
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/format_ssh_config.py"          # 只显示 diff
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/format_ssh_config.py" --write  # 写入
+uv run --project "~/.claude/skills/sshops" python "~/.claude/skills/sshops/scripts/format_ssh_config.py" --check  # 门禁：不符合退出码 1
 ```
+
+**格式契约（代码实现，权威定义在 `scripts/lib/ssh_config_format.py`）**：
+
+- 注释字段顺序固定：`description → environment → tags → location → password → created_at → updated_at`，空值省略，tags 逗号分隔。
+- Host 指令顺序固定：`HostName / User / Port（仅非 22）/ IdentityFile / ProxyJump`；`IdentityFile` 一律归一为 `~/.ssh/<文件名>`。
+- 块间恰好一个空行；行尾风格沿用文件原样（当前 `~/.ssh/config` 为 CRLF）。
+- 未识别指令与块内注释原样保留；不带元数据的块与 `Host *` 通配块整体不动。
+- `create` / `update` / `delete` 落盘后自动调用同一实现收敛整份文件；手工编辑产生的漂移用 `format_ssh_config.py --write` 收敛，CI 用 `--check` 做门禁。
 
 ### SSH Tunnel（端口转发）
 
