@@ -1,6 +1,6 @@
 ---
 name: daily-work-summary
-description: Use when the user asks for a Chinese daily work summary, work log, day-end review, objective workplace recap, diligent time note, or a summary based on daily Git commits and local Claude Code or Codex conversations. Supports extracting Git records with daily_git_commits.py, persisted Claude Code JSONL with daily_claude_conversations.py, local Codex JSONL with daily_codex_conversations.py, and appending diligent time with calculate_diligent_time.py while keeping strict objective Chinese prose.
+description: Use when the user asks for a Chinese daily work summary, work log, day-end review, objective workplace recap, diligent time note, or a summary based on daily Git commits and local Claude Code or Codex conversations. Supports extracting Git records with daily_git_commits.py, persisted Claude Code JSONL with daily_claude_conversations.py, local Codex JSONL with daily_codex_conversations.py, and appending diligent time with calculate_diligent_time.py while keeping strict objective Chinese prose. Defaults to plain-language Chinese for leaders or non-technical readers and about 350 Chinese characters unless the user requests another length.
 ---
 
 # Daily Work Summary
@@ -84,6 +84,16 @@ If the user has not provided today's work content and has not requested a summar
 
 Do not add the three-item opening to this initialization response.
 
+## Default Reader
+
+Assume the reader is a leader or a non-technical colleague. That reader may know general concepts such as interface, configuration, log, database, deployment, and service registration, but may not know specific component names, implementation details, or internal identifiers.
+
+Write for that reader:
+
+- Explain what problem was handled, which workflow or system it belongs to, what action was taken, and what remains open.
+- Translate technical actions into plain workplace Chinese. A general concept can stay; a specific implementation detail needs a short explanation or should be omitted.
+- Use English only for necessary proper nouns or identifiers with no natural Chinese name. Do not use English to make a sentence look precise.
+
 ## Required Output Shape
 
 For a completed summary, use this structure:
@@ -108,12 +118,13 @@ Rules:
 - After the opening, write continuous paragraphs only.
 - When adding diligent time, append exactly two independent lines after the正文: `[勤奋时间][17:45][xx:xx]` and `勤奋工作内容: ...`.
 - Diligent time lines are the only allowed extra non-paragraph lines after the opening.
-- Default to at least 300 Chinese characters when the user requests a detailed summary or gives enough work content.
+- Default to about 350 Chinese characters when the user gives enough work content. Treat this as a target, not a hard limit; follow an explicit user request for a shorter or longer summary.
 - Do not use personal pronouns such as“我”“我们”“本人”.
 - Do not use the Chinese character “了”.
 - Do not use order-linking words such as“首先”“其次”“然后”“最后”.
-- Do not use metaphors, exaggeration, slogans, or English. Translate technical terms to Chinese where there is a natural equivalent (接口、字段、配置、流程、日志), and keep an English term only when it is a proper noun with no common Chinese name.
+- Do not use metaphors, exaggeration, or slogans. Use English only for necessary proper nouns or identifiers with no natural Chinese name.
 - Do not overemphasize implementation details. Avoid file paths, class/function/variable names, code snippets, stack traces, or log/SQL fragments in the body; mention a name only when it is the only way to identify which piece of work is meant.
+- Do not open the body with a total summary of the day, such as“今天的工作围绕……展开”, and do not label paragraphs with“部署方面”“业务方面”“配置方面”这一类分点标题. Each paragraph should directly describe one concrete work theme.
 - Do not mention whether a fact came from Git, a conversation transcript, a tool call, or another internal source. Express only the objective work content.
 - Distinguish completed handling, active investigation, discussion, and pending follow-up. A conversation request alone is not evidence of completion.
 
@@ -142,12 +153,18 @@ Cover these elements in prose:
 
 ## Body Paragraph Style
 
-Body paragraphs should read like plain Chinese workplace prose that a colleague outside the codebase could follow. The goal is to describe what was done and where it sits in the work, not to reproduce the code. Explain in accessible terms (深入浅出): state the problem, the action, and the work's position, so a reader not familiar with the code can understand. Prefer describing purpose and role over mechanism.
+Body paragraphs should read like plain Chinese workplace prose for a leader or colleague outside the technical front line. Each paragraph should directly describe one concrete work theme, not announce a topic before the detail. State the problem, the action, and where the work sits, so a reader who knows general technical concepts but not implementation details can follow the point. Prefer purpose and role over mechanism.
 
 Good:
 
 ```text
-该接口负责返回审批列表，部分请求返回的字段与配置不一致。经核对，定位到字段来源配置与返回逻辑存在差异，调整字段映射，并复查空值场景。
+服务从旧运行环境迁到新版后，原来的注册方式和网络访问方式不能直接复用。部署说明按注册中心、网络访问和数据库脚本三部分整理，保留仍然沿用的配置，列出需要新增或替换的项和脚本顺序。
+```
+
+Bad — starts with a total summary and labels each paragraph like a report section:
+
+```text
+今天的工作围绕部署、配置和数据库展开。部署方面，调整注册配置；业务方面，核对错误返回；数据库方面，检查脚本顺序。
 ```
 
 Bad — too much code detail and English, reads like a code review instead of a daily note:
@@ -216,10 +233,13 @@ Before answering, scan the draft for:
 - No personal pronouns appear.
 - No Chinese character “了” appears.
 - No“首先/其次/然后/最后”appear.
+- The body does not start with a total summary of the day and does not label paragraphs with“XX方面”section headings.
+- Each body paragraph directly describes one concrete work theme; the reader can follow the problem, action, and position without knowing implementation details.
+- English appears only for necessary proper nouns or identifiers; general technical concepts use common Chinese wording.
 - Reflection describes facts, constraints, challenges, and follow-up work instead of benefits or impact.
 - Conversation requests and plans are not written as completed work without operation or result evidence.
 - Duplicate topics from conversation facts and Git facts are merged into one theme.
 - The final text does not disclose transcript sources, system content, tool results, internal reasoning, paths, or sensitive values.
-- Body paragraphs carry minimal code-level detail (no paths, names, snippets, traces) and minimal English, and stay readable for someone outside the codebase.
+- Body paragraphs carry minimal code-level detail (no paths, names, snippets, traces) and stay readable for someone outside the technical front line.
 
 If any check fails, revise before output.
