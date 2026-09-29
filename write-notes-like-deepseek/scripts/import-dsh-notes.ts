@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execSync } from 'node:child_process';
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,39 +14,13 @@ const targetNotesDir = args[1] ? resolve(args[1]) : resolve(__dirname, '../.agen
 
 const LIFECYCLES = ['implemented', 'proposed', 'rejected', 'archived'];
 
-/** 去掉双语切换行，并把 `.zh.md` 相对链接归一化为 `.md`——本 skill 是中文单语宿主。 */
+/** 去掉双语切换行，并把 `.zh.md` 相对链接归一化为 `.md`——导入目标是中文单语宿主。 */
 function normalizeBilingual(content: string): string {
   return content
     .replace(/^\[English\]\([^)]+\)\s*\|\s*中文\s*\n+/m, '')
     .replace(/^English\s*\|\s*\[中文\]\([^)]+\)\s*\n+/m, '')
     .replace(/^\[English\]\([^)]+\)\s*\n+/m, '')
     .replace(/\]\(([^)#]+)\.zh\.md([#)])/g, ']($1.md$2');
-}
-
-// 格式门禁只认英文头块，这两个 token 保持英文原文；标题里的全角冒号归一半角。
-const ENGLISH_STATUS = new Map([
-  ['已实现', 'implemented'],
-  ['implemented', 'implemented'],
-  ['提议', 'proposed'],
-  ['proposed', 'proposed'],
-  ['已否决', 'rejected'],
-  ['rejected', 'rejected'],
-]);
-
-/** 中文稿把「状态：已实现」这类行译了出去；门禁要的是英文状态行。 */
-function normalizeHeaderTokens(content: string): string {
-  return content
-    .replace(/^(# Agent Note)[:：][ \t]*/m, '$1: ')
-    .replace(/^状态[:：]\s*(.+)$/gm, (line, raw: string) => {
-      const tail = raw.trim();
-      const word = tail.split(/[—－]/)[0]?.trim() ?? '';
-      const english = ENGLISH_STATUS.get(word);
-      if (english === undefined) return line;
-      // 拒绝原因保持原样附在英文词之后，其余状态丢弃多余说明——状态行不带括号补充。
-      return english === 'rejected' && tail !== word
-        ? `Status: rejected — ${tail.replace(/^[^—－]+[—－]\s*/, '')}`
-        : `Status: ${english}`;
-    });
 }
 
 if (!existsSync(dshNotesDir)) {
@@ -89,21 +64,27 @@ for (const [cleanRel, sourcePath] of noteMap.entries()) {
   const destPath = join(targetNotesDir, cleanRel);
   mkdirSync(dirname(destPath), { recursive: true });
 
-  let content = readFileSync(sourcePath, 'utf8');
-
-  // 去掉双语切换行、归一化 `.zh.md` 链接、把中文头块 token 换回英文
-  content = normalizeHeaderTokens(normalizeBilingual(content));
-
-  writeFileSync(destPath, content, 'utf8');
+  // 去掉双语切换行，并把文内 `.zh.md` 相对链接（含 #anchor）归一化为 `.md`
+  writeFileSync(destPath, normalizeBilingual(readFileSync(sourcePath, 'utf8')), 'utf8');
   copied++;
 }
 
-// README / AGENTS.md 供笔记间相对跳转；README 只取中文版——
-// 英文版会被中文版覆盖成自指的切换行（`English | [中文](README.md)`）。
+// README / AGENTS.md 供笔记间相对跳转；README 只取中文版——旧写法按
+// README.zh.md → README.md → AGENTS.md 的顺序拷贝，英文版最后落盘、把中文版覆盖掉。
 for (const [src, dest] of [['README.zh.md', 'README.md'], ['AGENTS.md', 'AGENTS.md']] as const) {
   const p = join(dshNotesDir, src);
   if (!existsSync(p)) continue;
-  writeFileSync(join(targetNotesDir, dest), normalizeHeaderTokens(normalizeBilingual(readFileSync(p, 'utf8'))), 'utf8');
+  writeFileSync(join(targetNotesDir, dest), normalizeBilingual(readFileSync(p, 'utf8')), 'utf8');
 }
+
+// 导入的归档语料要补封印：--write 先证明既有封印未变，再追加缺失条目。
+// AGENT_NOTE_ROOT 钉住本次导入的目标目录，免得按 cwd 封印到别的树；失败静默跳过，
+// 导入后仍应跑一次 verify-notes 才算拿到证据。
+try {
+  execSync(`npx tsx "${join(__dirname, 'verify-archived-agent-notes.ts')}" --write`, {
+    stdio: 'ignore',
+    env: { ...process.env, AGENT_NOTE_ROOT: targetNotesDir },
+  });
+} catch {}
 
 console.log(`✅ 成功将 ${copied} 篇中文 Note 标准化写入到: ${targetNotesDir}`);

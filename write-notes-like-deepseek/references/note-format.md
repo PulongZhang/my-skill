@@ -14,7 +14,7 @@ Status: <状态>
 - `implemented` → `Status: implemented`
 - `rejected` → `Status: rejected — <一句话原因>`
 
-标题前必须带 `Agent Note: ` 前缀；状态不含日期与括号；必须与所在 lifecycle 文件夹一致（脚本会交叉核对）。文件名日期是首次提出日，git 承载其余时间信息。
+标题前必须带 `Agent Note: ` 前缀；状态不含日期与括号；必须与所在 lifecycle 文件夹一致（脚本会交叉核对）。文件名日期是首次提出日，git 承载其余时间信息。门禁同时接受英文原文和 `状态：已实现` 这类中文写法；本项目仍统一写英文。
 
 ## Body 骨架
 
@@ -53,7 +53,7 @@ Status: <状态>
 
 每篇 Note 必含 `## Alternatives considered`：每个**真考虑过**的备选为何没选，一段一备选（可用 `### Why not <X>?` 子节）。没有过的选项不要编。「不做 / 复用现状」仅当当时真的权衡过才写。脚本只检查这一节在不在。
 
-唯一例外是从 DSH 导入的历史语料：备选确实无从考据时，用逐字一行 `<!-- agent-note-format: alternatives-not-recorded (pre-format Agent Note) -->` 代替，且只对 `2026-07-05` 之前提出的笔记有效——新笔记写这行会被脚本拒。
+唯一例外是从 DSH 导入的历史语料：备选确实无从考据时，用逐字一行 `<!-- agent-note-format: alternatives-not-recorded (pre-format Agent Note) -->` 代替，且只对 `2026-07-05` 之前提出的笔记有效——新笔记写这行会被脚本拒。它是这一节的替代品而非附注：同一篇里既写了 `## Alternatives considered` 又留着这行注释，同样被拒。
 
 ## 时态与禁止改写
 
@@ -68,4 +68,4 @@ Status: <状态>
 - 保留可检索的机制名与 `must`/`may`/`never` 时序强调；一个事实只在一处讲透，其余链过去。
 - 跨 Note 引用用相对 Markdown 链接 `[topic](../../implemented/architecture/2026-…-….md)`，不要裸数字。
 
-格式与别名表对齐 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 notes 规范；本项目为中文单语，头块 `Agent Note:` 与 `Status:` 保持英文原文以便脚本核对，正文用中文。
+格式与别名表对齐 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 notes 规范；本项目为中文单语，头块 `Agent Note:` 与 `Status:` 统一写英文原文（门禁也收中文状态写法，但不作为默认），正文用中文。

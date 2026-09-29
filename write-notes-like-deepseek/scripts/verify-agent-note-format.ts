@@ -10,9 +10,9 @@ import { resolve } from "node:path";
 import { agentNoteRoot, walkAgentNoteTree } from "./agent-note-tree.ts";
 
 const STATUS: Record<string, RegExp> = {
-  proposed: /^Status: proposed$/,
-  implemented: /^Status: implemented$/,
-  rejected: /^Status: rejected — .+$/,
+  proposed: /^Status: proposed$|^状态[:：] ?(?:proposed|已提议)$/,
+  implemented: /^Status: implemented$|^状态[:：] ?(?:implemented|已实现)$/,
+  rejected: /^Status: rejected — .+$|^状态[:：] ?(?:rejected|已否决) — .+$/,
 };
 
 /** 导入的历史语料：文件名日期早于此值时，才允许用整行注释代替 `## Alternatives considered`。 */
@@ -31,7 +31,7 @@ const REQUIRED: Record<string, string[][]> = {
   ],
   implemented: [
     ["## Decision", "## 决定", "## 决策"],
-    ["## Consequences", "## 后果", "## 影响", "## 结果", "## 结果与代价"],
+    ["## Consequences", "## 后果", "## 影响", "## 结果", "## 结果与代价", "## 影响与验证"],
   ],
   rejected: [
     ["## Proposal", "## 提议", "## 方案", "## 提案"],
@@ -45,7 +45,7 @@ const BANNED_IMPLEMENTED = new Set([
   "## 验收标准", "## 验收条件", "## 接受标准",
 ]);
 
-const ALTERNATIVES_RE = /^## (?:Alternatives considered|.{0,8}?(?:替代方案|备选方案))$/;
+const ALTERNATIVES_RE = /^## (?:Alternatives considered|.{0,8}?(?:替代方案|备选(?:方案)?))$/;
 
 /** Strip trailing parenthetical: `## Decision（说明）` → `## Decision`. */
 function headingBase(h: string): string {
@@ -124,7 +124,7 @@ for (const note of notes) {
   // not be miscounted as a duplicate status header.
   const looksLikeStatusLine = (l: string) => {
     const t = l.trim();
-    return t === "Status: proposed" || t === "Status: implemented" || /^Status: rejected — .+$/.test(t);
+    return Object.values(STATUS).some((re) => re.test(t));
   };
   const statusCount = prose.filter(looksLikeStatusLine).length;
   if (statusCount !== 1) fail("Status: line must appear exactly once");
@@ -145,16 +145,14 @@ for (const note of notes) {
     }
   }
 
-  if (!bases.some((h: string) => ALTERNATIVES_RE.test(h))) {
-    // 导入的历史语料可能带着这行注释——只在 cutoff 之前提出的笔记上放行，
-    // 否则它就成了绕开必填小节的漏洞。
-    const grandfather = lines.some((l, i) => !src.fenced[i] && l.trim() === LEGACY_ALTERNATIVES_COMMENT);
-    if (grandfather && note.date >= PRE_FORMAT_CUTOFF) {
-      fail(`legacy alternatives comment is only valid for notes dated before ${PRE_FORMAT_CUTOFF}`);
-    } else if (!grandfather) {
-      fail("missing ## Alternatives considered / ## 备选方案");
-    }
-  }
+  const hasSection = bases.some((h: string) => ALTERNATIVES_RE.test(h));
+  // 逐字注释按行判定，跳过代码块里的示例行。
+  const hasGrandfather = lines.some((l, i) => !src.fenced[i] && l.trim() === LEGACY_ALTERNATIVES_COMMENT);
+  if (hasSection && hasGrandfather) fail("carries both ## Alternatives considered and the alternatives-not-recorded comment — drop the comment");
+  if (!hasSection && !hasGrandfather) fail("missing ## Alternatives considered / ## 备选方案");
+  // 导入的历史语料可能只带这行注释——只在 cutoff 之前提出的笔记上放行，
+  // 否则它就成了绕开必填小节的漏洞。
+  if (hasGrandfather && note.date >= PRE_FORMAT_CUTOFF) fail(`alternatives-not-recorded comment is only valid for notes dated before ${PRE_FORMAT_CUTOFF}`);
 }
 
 if (errors.length) {

@@ -8,9 +8,9 @@
    - 校验 lifecycle 封闭集 `proposed/implemented/rejected` + `archived`、class 封闭集 6 个、路径深度 `{lifecycle}/{class}/file.md`、文件名 `yyyy-mm-dd-topic.md`、禁止 `INDEX.md`、活跃笔记内部相对 Markdown 链接有效性。
 
 2. **`verify-agent-note-format`**（`scripts/verify-agent-note-format.ts`）
-   - 头部：第 1 行 `# Agent Note:` 标题（半角/全角冒号都收，中文输入法常打出全角）、第 2/4 行空行、第 3 行 `Status:` 与 lifecycle 一致且全篇唯一。
+   - 头部：第 1 行 `# Agent Note:` 标题（半角/全角冒号都收，中文输入法常打出全角）、第 2/4 行空行、第 3 行 `Status:` 与 lifecycle 一致且全篇唯一（英文原文与 `状态：已实现` 这类中文写法都认）。
    - 骨架：首节必须 `## Problem`/`## 问题`；per-lifecycle 必需节匹配中英别名（`## Decision`/`## 决策`、`## Consequences`/`## 后果` 等；`## Decision（说明）` 这类括号后缀会先剥掉再匹配）；`implemented` 禁用提案式标题（`## Proposal`/`## Plan`/`## Migration plan`/`## Acceptance criteria` 及其中文别名）。现在时是散文纪律，不扫正文。
-   - 备选方案：`## Alternatives considered` / `## 备选方案` / `## 已考虑的替代方案` 等别名必写。脚本不检查「不做/复用」档；唯一豁免是导入语料里那行逐字的 `<!-- agent-note-format: alternatives-not-recorded (pre-format Agent Note) -->`，且只对 `2026-07-05` 之前提出的笔记有效——新笔记写这行会被拒。历史语料也可改为补写 `## Alternatives considered`，那行注释随即删掉。
+   - 备选方案：`## Alternatives considered` / `## 备选方案` / `## 已考虑的替代方案` 等别名必写。脚本不检查「不做/复用」档；唯一豁免是导入语料里那行逐字的 `<!-- agent-note-format: alternatives-not-recorded (pre-format Agent Note) -->`，且只对 `2026-07-05` 之前提出的笔记有效——新笔记写这行会被拒。它是替代品而非附注：同一篇里既写小节又留这行注释同样报错。历史语料也可改为补写 `## Alternatives considered`，那行注释随即删掉。
    - 兼容：CRLF/BOM 自动归一。
 
 3. **`verify-archived`**（`scripts/verify-archived-agent-notes.ts`，标配）
@@ -24,7 +24,7 @@
 
 5. **`import-dsh-notes`**（`scripts/import-dsh-notes.ts`，只给本 skill 的语料更新用）
    - 从 DSH 仓库 `选中文副本` 导入：去双语切换行、`.zh.md` 链接归一化为 `.md`。
-   - 导入后必然要补的机械步骤：`npx tsx scripts/verify-archived-agent-notes.ts --write` 为导入的归档语料补封印（它先校验既有封印未变，再追加缺失条目）。`archived/AGENTS.md` 不随导入，归档目录只需 `class/` 子目录。
+   - 写完后自动跑一次 `verify-archived-agent-notes --write` 为导入的归档语料补封印（先校验既有封印未变，再追加缺失条目）；该步骤用 `AGENT_NOTE_ROOT` 指向本次导入的目标目录，不随 cwd 漂移，失败时静默跳过——所以导入后仍应跑 `npm run verify-notes` 才算拿到证据。`archived/AGENTS.md` 不随导入，归档目录只需 `class/` 子目录。
 
 ## 接入建议
 
