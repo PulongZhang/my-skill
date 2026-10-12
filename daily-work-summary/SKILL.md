@@ -99,9 +99,9 @@ Write for that reader:
 For a completed summary, use this structure:
 
 ```text
-1、处理需求配置问题
-2、排查接口返回异常
-3、核对代码提交记录
+1、开发外部调用节点
+2、排查主备定时任务及存储报错
+3、核对调拨类型在保存时缺失的原因
 
 正文段落……
 
@@ -114,6 +114,7 @@ Rules:
 - Start with exactly three numbered lines: `1、`, `2、`, `3、`.
 - Put each numbered item on its own line.
 - Each item should be a complete Chinese sentence where possible, and must be under 20 Chinese characters, excluding the number and punctuation.
+- Write each item naturally from its actual work content. Do not pad or shorten items to equalize their lengths, or force the same sentence pattern or sequence of two-character words. Coincidentally equal lengths are acceptable; do not force different lengths either.
 - The opening three lines are the only allowed list or分点.
 - After the opening, write continuous paragraphs only.
 - When adding diligent time, append exactly two independent lines after the正文: `[勤奋时间][17:45][xx:xx]` and `勤奋工作内容: ...`.
@@ -226,6 +227,7 @@ Replace them with neutral action verbs:
 Before answering, scan the draft for:
 
 - The three opening items are separate lines, each item is a complete Chinese sentence where possible, and each item is under 20 Chinese characters.
+- Opening items reflect their actual content without padding, unnecessary shortening, or forced matching lengths and sentence patterns; coincidentally equal lengths are acceptable.
 - No extra lists appear after the opening, except the optional two diligent time lines after正文.
 - If diligent time is included, it has exactly two lines: `[勤奋时间][17:45][xx:xx]` and `勤奋工作内容: ...`.
 - No forbidden exact words appear.
