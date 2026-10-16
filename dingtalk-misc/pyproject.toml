@@ -1,0 +1,9 @@
+[project]
+name = "dingtalk-misc"
+version = "0.1.0"
+description = "Python helpers for the dingtalk-misc skill"
+requires-python = ">=3.10"
+dependencies = ["openpyxl", "pillow", "requests", "tzdata"]
+
+[tool.uv]
+package = false

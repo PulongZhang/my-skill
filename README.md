@@ -43,6 +43,33 @@ description: Use when handling the example workflow.
 
 `name` 和 `description` 是 cc-switch 用于展示的关键元数据。缺失时目录仍可能被发现，但会退化为目录名和空描述。
 
+## 钉钉 DWS Skills
+
+本次导入的 16 个 `dingtalk-*` Skill 来自 [DingTalk Workspace CLI 官方 multi Skills](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/tree/92cb3f513c457b9a3578b72ed870632e891dded3/skills/multi)，来源提交为 `92cb3f513c457b9a3578b72ed870632e891dded3`。各目录从上游 `skills/multi/` 移到本仓库顶层，保留原名称、业务规则、参考文件和脚本；Python 调用适配本仓库的 uv 规范，并修正共享参考中的两处根文件链接。各目录的 `LICENSE`、`NOTICE` 保留授权、来源和适配说明。
+
+| Skill | 主要功能 |
+|---|---|
+| [dingtalk-shared](dingtalk-shared/SKILL.md) | 通用执行规则、功能选择和跨产品工作流 |
+| [dingtalk-aisearch](dingtalk-aisearch/SKILL.md) | 语义找人、跨来源主题搜索和行为回溯 |
+| [dingtalk-contact](dingtalk-contact/SKILL.md) | 人员详情、手机号精确查询、部门与角色 |
+| [dingtalk-chat](dingtalk-chat/SKILL.md) | 搜索和收发消息、群管理、机器人与文件 |
+| [dingtalk-calendar](dingtalk-calendar/SKILL.md) | 日程、参会人、闲忙与会议室 |
+| [dingtalk-doc](dingtalk-doc/SKILL.md) | 在线文档正文、块、评论和导入导出 |
+| [dingtalk-drive](dingtalk-drive/SKILL.md) | 钉盘文件、目录、权限与同步 |
+| [dingtalk-wiki](dingtalk-wiki/SKILL.md) | 知识库、库内节点与成员管理 |
+| [dingtalk-aitable](dingtalk-aitable/SKILL.md) | AI 表格的字段、记录、视图与数据分析 |
+| [dingtalk-minutes](dingtalk-minutes/SKILL.md) | AI 听记、摘要、逐字稿和行动项 |
+| [dingtalk-todo](dingtalk-todo/SKILL.md) | 待办查询、创建、指派和完成 |
+| [dingtalk-mail](dingtalk-mail/SKILL.md) | 邮件查询、发送、回复与附件 |
+| [dingtalk-event](dingtalk-event/SKILL.md) | 消息、审批、待办等事件实时监听 |
+| [dingtalk-aicard](dingtalk-aicard/SKILL.md) | AI 卡片 JSON 创建、编辑与校验 |
+| [dingtalk-tag](dingtalk-tag/SKILL.md) | 数字员工的创建、配置与管理 |
+| [dingtalk-misc](dingtalk-misc/SKILL.md) | 审批、考勤、日志、电子表格、白板等其他功能 |
+
+在 cc-switch 中添加本仓库即可发现这些 Skill。它们通过相邻目录互相引用，建议成套安装；按需安装时也应安装入口指向的依赖 Skill。CLI 可用后，直接用自然语言提出需求，例如“总结项目群今天的消息”“查看本周日程”“从这份听记提取行动项并创建待办”，Agent 按对应 Skill 执行。
+
+执行在线业务前需另行安装 `dws` 并完成 `dws auth login`，组织须允许 CLI 访问；只导入 Skill 不会安装 CLI 或获得钉钉权限。安装和认证方法见[官方开始使用说明](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/README_zh.md#开始使用)。本仓库不引入 legacy mono `dws` Skill。
+
 ## Python 与 uv 规范
 
 所有包含可执行 Python 脚本的 Skill 都必须将运行依赖声明在自身的 `pyproject.toml`，并提交由 `uv lock` 生成的 `uv.lock`。禁止依赖系统 Python、Anaconda 环境或未记录的全局 `pip install`。
@@ -51,6 +78,13 @@ description: Use when handling the example workflow.
 
 - `azure-devops-pr-code-review`
 - `daily-work-summary`
+- `dingtalk-aitable`
+- `dingtalk-calendar`
+- `dingtalk-contact`
+- `dingtalk-mail`
+- `dingtalk-minutes`
+- `dingtalk-misc`
+- `dingtalk-todo`
 - `gif-generator`
 - `meeting-minutes-docx`
 - `running-song-maker`

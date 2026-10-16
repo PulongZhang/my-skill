@@ -1,0 +1,9 @@
+[project]
+name = "dingtalk-minutes"
+version = "0.1.0"
+description = "Python helpers for the dingtalk-minutes skill"
+requires-python = ">=3.10"
+dependencies = ["tzdata"]
+
+[tool.uv]
+package = false
