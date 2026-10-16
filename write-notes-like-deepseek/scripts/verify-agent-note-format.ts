@@ -3,7 +3,7 @@
  * Implemented notes may not carry proposal-era H2s; present tense in the
  * body is a prose rule, not a lexical scan. A pre-format (imported) note
  * may carry the legacy alternatives comment instead of the section.
- * Run: npx tsx scripts/verify-agent-note-format.ts
+ * Run: npx tsx <skill-dir>/scripts/verify-agent-note-format.ts
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

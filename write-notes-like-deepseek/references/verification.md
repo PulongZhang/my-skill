@@ -22,13 +22,17 @@
 4. **`check-note-anchors`**（`scripts/check-note-anchors.ts`，软报告，退出码恒 0，**不进 CI**）
    - 扫描源码（env `AGENT_NOTE_CODE_ROOT` 指定根，默认 cwd；自动跳过 node_modules/.git/dist 等）里的 `// Note:` / `# Note:` 物理锚点：报告悬空锚点、没有锚点指向的 implemented 笔记、缺路径的锚点行。宿主没用锚点就不必跑。
 
-5. **`import-dsh-notes`**（`scripts/import-dsh-notes.ts`，只给本 skill 的语料更新用）
+5. **`import-dsh-notes`**（仓库根目录的 `scripts/import-dsh-notes.ts`，仅用于本仓库语料维护，不随 Skill 安装）
    - 从 DSH 仓库 `选中文副本` 导入：去双语切换行、`.zh.md` 链接归一化为 `.md`。
    - 写完后自动跑一次 `verify-archived-agent-notes --write` 为导入的归档语料补封印（先校验既有封印未变，再追加缺失条目）；该步骤用 `AGENT_NOTE_ROOT` 指向本次导入的目标目录，不随 cwd 漂移，失败时静默跳过——所以导入后仍应跑 `npm run verify-notes` 才算拿到证据。`archived/AGENTS.md` 不随导入，归档目录只需 `class/` 子目录。
 
 ## 接入建议
 
 - 轻量（个人/无 git）：前两个脚本即可，归档封印在第一次归档后自然生效。
-- 完整（团队）：`npm run verify-notes` 三线串进 CI，失败即红（本仓库 `.github/workflows/verify-notes.yml` 可作模板）。
+- 完整（团队）：`npm run verify-notes` 三线串进 CI，失败即红（本 Skill 的 `templates/verify-notes.yml` 可作模板，复制到宿主根目录 `.github/workflows/` 并核对脚本路径后启用）。
 
 三个校验脚本方法上来自 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)，按通用中文单语宿主裁过：无双语三件套、无 DSH 的 `AGENTS.md` 归档根文件。锚点体检是可选软报告，不是 DSH 门禁。
+
+## 脚本路径
+
+除仓库维护命令 `import-dsh-notes` 外，本文的 `scripts/` 相对于 Skill 安装目录。运行命令时保持当前目录为宿主项目根目录，并使用实际 Skill 路径调用脚本；安装本身不会创建宿主 npm scripts。
