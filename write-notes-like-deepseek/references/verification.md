@@ -24,14 +24,14 @@
 
 5. **`import-dsh-notes`**（仓库根目录的 `scripts/import-dsh-notes.ts`，仅用于本仓库语料维护，不随 Skill 安装）
    - 从 DSH 仓库 `选中文副本` 导入：去双语切换行、`.zh.md` 链接归一化为 `.md`。
-   - 写完后自动跑一次 `verify-archived-agent-notes --write` 为导入的归档语料补封印（先校验既有封印未变，再追加缺失条目）；该步骤用 `AGENT_NOTE_ROOT` 指向本次导入的目标目录，不随 cwd 漂移，失败时静默跳过——所以导入后仍应跑 `npm run verify-notes` 才算拿到证据。`archived/AGENTS.md` 不随导入，归档目录只需 `class/` 子目录。
+   - 清理源端已删除或移动的旧笔记，复制 `archived/AGENTS.md`；移除导入副本的旧 manifest，再自动跑一次 `verify-archived-agent-notes --write`，按标准化后的本地文件重建封印。该步骤用 `AGENT_NOTE_ROOT` 指向本次导入的目标目录，不随 cwd 漂移，失败时静默跳过——所以导入后仍应跑 `npm run verify-notes` 才算拿到证据。重建仅适用于导入副本，正常归档校验仍检查封印只增不改。
 
 ## 接入建议
 
 - 轻量（个人/无 git）：前两个脚本即可，归档封印在第一次归档后自然生效。
 - 完整（团队）：`npm run verify-notes` 三线串进 CI，失败即红（本 Skill 的 `templates/verify-notes.yml` 可作模板，复制到宿主根目录 `.github/workflows/` 并核对脚本路径后启用）。
 
-三个校验脚本方法上来自 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)，按通用中文单语宿主裁过：无双语三件套、无 DSH 的 `AGENTS.md` 归档根文件。锚点体检是可选软报告，不是 DSH 门禁。
+三个校验脚本方法上来自 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)，按通用中文单语宿主裁过：无双语三件套，归档根目录的 `AGENTS.md` 不作为笔记校验或封印。锚点体检是可选软报告，不是 DSH 门禁。
 
 ## 脚本路径
 
