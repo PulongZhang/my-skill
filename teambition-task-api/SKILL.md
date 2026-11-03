@@ -1,9 +1,9 @@
 ---
 name: teambition-task-api
-description: Use when querying Teambition tasks or project metadata, backfilling and inspecting work-time records, creating tasks needed by an approved work-time plan, completing verified taskflow tasks, or reusing a logged-in Teambition browser session through chrome-devtools or an F12 console script. Also use when Git commits or a daily work summary must be turned into a proposed Teambition work-time plan; keep extraction/planning separate from authorized writes.
+description: Use when querying Teambition tasks or project metadata, backfilling and inspecting work-time records, creating tasks needed by an approved work-time plan, completing verified taskflow tasks, updating existing file versions through the logged-in Chrome session and AWOS API, or reusing a logged-in Teambition browser session through chrome-devtools or an F12 console script. Also use when Git commits or a daily work summary must be turned into a proposed Teambition work-time plan; keep extraction/planning separate from authorized writes.
 ---
 
-# Teambition 任务 API
+# Teambition 任务与文件 API
 
 ## 概览
 
@@ -13,7 +13,7 @@ description: Use when querying Teambition tasks or project metadata, backfilling
 
 **查询现状 → 明确计划 → 用户授权 → 写前校验 → 修改 → 独立验证**
 
-查询可直接执行。创建任务、登记工时、删除记录和修改任务状态均属于外部写操作，必须先取得用户明确授权。
+查询可直接执行。创建任务、登记工时、删除记录、修改任务状态和更新文件版本均属于外部写操作，必须有用户明确授权。复用会话里已确认的目标与持续授权，不因改用 API 再次要求同一范围的确认；维护技能不触发这些写操作。
 
 ### 已验证范围与边界
 
@@ -26,6 +26,7 @@ description: Use when querying Teambition tasks or project metadata, backfilling
 | 单独批量创建任务 | 可复用“补录工时”的任务识别、元数据校验与创建后验证规则，但必须形成独立计划和授权，不得顺带登记工时 |
 | 完成工作流任务 | 支持；只能使用任务实际 SFC 已验证的 `kind: end` 状态 |
 | 检查工时涉及任务的状态 | 支持；直接按工时记录中的任务 ID 查询，不与未完成任务集合取交集 |
+| 更新已有文件版本 | S1867 部署的 AWOS/版本接口已只读核对；默认复用 Chrome 登录态，原 ID 更新后独立下载核验，见[文件版本参考](references/file-versions.md)；不包含新建文件 |
 | 通用任务字段编辑、项目元数据修改 | 当前没有已验证流程，不应凭经验调用 |
 | 删除任务或工时 | 仅保留为需单独核实的高风险场景；接口响应和写后查询契约未确认前不得执行 |
 
@@ -34,21 +35,21 @@ description: Use when querying Teambition tasks or project metadata, backfilling
 ## 执行决策
 
 1. 先从用户提供的 URL、当前页面和项目参考中解析部署 origin。项目参考已经记录地址时必须读取并复用，不得先打开同名公有云站点试探。
-2. 用户明确要求 MCP Chrome / Chrome DevTools 时，把该浏览器表面视为硬约束：先发现并调用 `mcp__chrome_devtools__list_pages`（有些环境显示为 `mcp__chrome-devtools__list_pages`），不得用内置浏览器或其他浏览器代替。不要仅因初始可见工具列表中没有它就断言不可用，应先完成工具发现。
-3. 调用 `list_pages` 查找已打开的 Teambition 页面。找到后先用 `select_page` 选中；没有时只在空白页导航到已确认的部署 origin，或用 `new_page` 新开页面，避免覆盖无关标签页。
+2. 用户明确要求 MCP Chrome / Chrome DevTools 时，把该浏览器表面视为硬约束：发现 `mcp__chrome_devtools__*`（有些环境显示为 `mcp__chrome-devtools__*`），不得用内置浏览器或其他浏览器代替。不要仅因初始可见工具列表中没有它就断言不可用，应先完成工具发现。
+3. 优先复用当前聊天已确认的 Teambition 页面 ID，并在每次脚本内校验 origin 和登录状态；无可用页面时才调用 `list_pages` 重新定位。工具支持显式 `pageId` 时直接传入，无需额外 `select_page`；没有目标页面则在空白页导航到已确认的 origin，或用 `new_page` 新开页面，不覆盖无关标签页。页面 ID 不跨会话硬编码。
 4. MCP Chrome、内置浏览器和用户日常浏览器可能使用不同会话。导航后必须重新检查实际 URL 和登录态，不能用另一个浏览器已登录来推断当前 MCP Chrome 已登录。
 5. `navigate_page` 只用于已选中的 Teambition 页面或空白页，以打开或刷新已确认的目标 URL。
 6. 选中目标页面后检查 URL。如果包含 `/login`，立即停止并要求用户完成登录；登录前不得请求业务接口。
 7. 已登录时，使用 `evaluate_script` 在页面内执行同源 `fetch`：
    - 查询操作可直接执行；
-   - 创建、登记工时、删除、修改状态前必须展示具体计划并取得明确授权；
+   - 创建、登记工时、删除、修改状态及更新文件版本必须按已获授权的具体范围执行；缺少授权时先展示具体计划；
    - 每次脚本应自包含配置、请求 helper、操作逻辑和返回结果，不依赖上次执行留下的全局变量。
 8. Chrome DevTools 不可用，或用户要求手动运行时，生成完整、自包含的 F12 IIFE：`(async () => { ... })();`：
    - 只读请求的 IIFE 只包含查询、完整性检查和结果报告，不得包含任何写接口；
    - 写请求的 IIFE 必须执行“运行时查询 → 校验 → 预览 → `window.confirm`（明确允许取消）→ 写入 → 独立验证”，用户取消时不得产生写入。
 9. 始终让浏览器复用同源登录态。不得读取、打印或手工拼接 `Cookie` / `Authorization`。
 
-接口路径、请求字段和可复用函数见 [`references/api.md`](references/api.md)。
+任务和工时接口见 [`references/api.md`](references/api.md)；文件版本更新按需读取 [`references/file-versions.md`](references/file-versions.md)。
 
 ## 标准流程 A：查询全部未完成任务
 
@@ -142,6 +143,14 @@ F12 工时模板见 [`work-time-fill-template.js`](work-time-fill-template.js)�
 
 未知/缺失不能推断为未完成、删除或处理成功。`tasks/bulk` 不返回 `isArchived`（恒为 `null`），要把“已归档”作为独立分类必须另行用 GraphQL 查询归档字段，不能从 bulk 结果推断未归档。
 
+## 标准流程 E：更新同名原文件版本
+
+1. 确认本次已校验的完整来源文件、部署 origin、项目、目录与更新授权；项目级持续授权仅在其明确范围内生效。目录或来源不明时先查现状，不套用其他项目的默认目录。
+2. 按[文件版本参考](references/file-versions.md)完整分页查询，唯一匹配原文件，核对项目/目录/未归档/原 ID，并下载比较原始大小与 SHA-256；字节相同跳过。
+3. 复用已登录 Chrome 页面，在一次页面脚本内完成写前重查、AWOS 凭证请求、S3 对象上传、原文件版本提交及独立下载核验。默认不点击上传按钮或操作文件选择框。
+4. 只处理明确授权的原文件；不新建、重命名、修改可见性或成员。上传后、提交版本前再检查远端内容，发现并发变化则停止。
+5. 对象上传和版本提交均不自动重试。响应丢失或调用中断后只读核对原 ID 与下载哈希；只有独立下载的原始字节匹配才报告完成。
+
 ## 安全约束与失败处理
 
 - 查询可直接执行；所有外部写操作必须获得用户明确授权。
@@ -158,6 +167,7 @@ F12 工时模板见 [`work-time-fill-template.js`](work-time-fill-template.js)�
 ## 快速参考
 
 - API 细节：[`references/api.md`](references/api.md)
+- 文件上传与原文件版本：[`references/file-versions.md`](references/file-versions.md)
 - S1867 速查：[`references/s1867.md`](references/s1867.md)
 - F12 工时模板：[`work-time-fill-template.js`](work-time-fill-template.js)
 

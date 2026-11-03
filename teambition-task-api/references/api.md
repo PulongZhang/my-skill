@@ -14,6 +14,9 @@
 | 创建任务 | `POST /api/tasks` | 工作流状态必须是起始态 |
 | 更新工作流状态 | `PUT /api/tasks/{id}/taskflowstatus` | 唯一允许的工作流状态更新接口 |
 | 删除任务 | `DELETE /api/tasks/{id}` | 不可恢复，必须明确授权 |
+| 查询文件目录与原文件 | `GET /api/collections/{folderId}`、`GET /api/works?...` | 完整分页、同名唯一匹配及项目/目录校验；见[文件版本参考](file-versions.md) |
+| 申请文件上传凭证 | `POST /api/awos/upload-token` | 当前会话内使用，随后通过 S3 SDK 上传字节；不输出凭证 |
+| 更新原文件版本 | `POST /api/works/{workId}/versions` | 请求 `{fileToken}`，保留原 ID，独立下载核对大小和 SHA-256 |
 
 ## 同源请求与 Chrome DevTools
 
@@ -22,7 +25,7 @@
 Chrome DevTools 登录门禁：
 
 1. 先读取目标项目参考并确定实际 origin；内网部署不得默认打开 `www.teambition.com`。用户明确指定 MCP Chrome 时，先发现 `mcp__chrome_devtools__*`（部分环境显示为 `mcp__chrome-devtools__*`）工具，不要改用内置浏览器。
-2. 用 `list_pages` 找到受控页面；必要时仅在空白页用 `navigate_page` 打开已确认的 Teambition 同源地址。
+2. 优先复用当前聊天已确认的页面 ID，在脚本内重查 origin 与登录状态；无可用页面时用 `list_pages` 定位，必要时仅在空白页或新标签打开已确认的 Teambition 同源地址。
 3. 若页面仍在 `/login`，停止，等待用户完成登录，不尝试提取认证信息。不同浏览器表面可能使用不同会话，必须在当前 MCP Chrome 页面重新核对。
 4. 登录后，把完整函数声明传给 `evaluate_script`。每次调用都自包含配置和 helper，不依赖前一次调用留下的全局变量。
 
