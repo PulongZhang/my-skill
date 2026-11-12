@@ -7,6 +7,7 @@
 | 操作 | 接口 | 关键要求 |
 |---|---|---|
 | 全量查询任务 | `POST /api/v2/graphql` | 遍历 `hasNextPage` / `endCursor`；项目在本地过滤 |
+| 任务类型及工作流状态 | `GET /api/v2/projects/{projectId}/scenariofieldconfigs?objectType=task&withTaskflowstatus=true` | S1867 实测；按项目、SFC、工作流及状态种类校验 |
 | 按日期聚合工时 | `POST /work-time-server/api/work-time/aggregation/dates` | 需要工时服务头 |
 | 批量查任务 | `POST /work-time-server/api/tasks/bulk` | 需要工时服务头；按请求 ID 对账 |
 | 批量登记工时 | `POST /work-time-server/api/work-time/batch?...` | `time` 单位为毫秒 |
@@ -21,6 +22,8 @@
 ## 同源请求与 Chrome DevTools
 
 在已登录的 Teambition 页面执行相对路径 `fetch`，让浏览器复用同源登录态。不得读取、打印或手工拼接 `Cookie` / `Authorization`。`/work-time-server/` 下的接口还必须带 `x-organization-id` 和 `x-user-id`。
+
+项目 SFC、任务详情和富文本响应可能包含签名下载 URL、token 或其他无关字段。页面内先投影成当前任务所需的白名单字段，再返回工具结果、日志或聊天；不得输出完整原始对象、签名 URL、Cookie、Authorization 或上传凭证。错误报告只输出状态、错误码和不含敏感信息的必要说明。
 
 Chrome DevTools 登录门禁：
 
@@ -502,6 +505,77 @@ async () => {
 
 分类顺序为未知/缺失、已删除、已归档、已完成、未完成，命中前一类后不再进入后续类别。由于 `tasks/bulk` 不返回 `isArchived`，上述脚本只能可靠区分未知/已删除/已完成/未完成；要把“已归档”作为独立分类，必须再按任务 ID 走 GraphQL 查询归档字段，不能从 bulk 结果推断未归档。
 
+## 查询项目任务类型与工作流状态
+
+在 S1867 的已登录同源页面，实际界面使用并返回了以下只读接口：
+
+```http
+GET /api/v2/projects/{projectId}/scenariofieldconfigs?objectType=task&withTaskflowstatus=true
+```
+
+该部署返回 SFC 直接数组。每个目标 SFC 的 `_id`、`name`、`_projectId`、`objectType`、`_taskflowId` 和 `isArchived` 标识任务类型与归属；`taskflowstatuses[]` 包含状态 `_id`、`name`、`_taskflowId`、`kind` 和 `isArchived`。请求前确认 origin 与登录态；返回后仅输出完成校验所需的这些字段。
+
+按当前授权的项目和任务类型唯一选择 `objectType=task`、`isArchived=false` 的 SFC，并确认 `_projectId`、有效 SFC ID 及工作流 ID。状态 ID 重复、归属不符、缺字段或 `kind` 非已验证的 `start` / `unset` / `end` 时停止；只接受状态所属 `_taskflowId` 与该 SFC 一致、未归档且 ID 有效的项：创建按 `kind=start`，完成按 `kind=end`，提测按实际工作流中的“已提测”中间状态。用户已明确授权业务动作且符合条件的状态唯一时，不要求用户提供内部 ID；类型、状态或预期终态不唯一，或者登录失效时停止并消歧，不猜测。
+
+此请求及其响应形状已在 S1867 观察验证，不保证所有 Teambition 部署相同。其他部署只有在实际响应满足同等校验时才能采用；不可用或结构不符时停止，不能把历史项目 ID 当默认值。`GET /api/stages` 只返回任务列表的阶段，不是工作流状态查询。
+
+以下只读函数可传给 Chrome DevTools `evaluate_script`；执行前将四个配置值替换为本次已确定的 origin、项目、任务类型和动作。`submit` 仅适用于实际配置有名为“已提测”的 `kind=unset` 状态的场景。函数只返回通过校验的必要字段，不输出完整 SFC 或富文本；不创建任务或改变状态。
+
+<!-- workflow-metadata-example:start -->
+```javascript
+async () => {
+  const config = {
+    origin: "已确认的部署 origin",
+    projectId: "本次项目 ID",
+    sfcName: "本次任务类型名称",
+    action: "start", // start、submit 或 end
+  };
+  const validId = value => typeof value === "string" && /^[a-f0-9]{24}$/i.test(value);
+  if (location.origin !== config.origin || location.pathname.includes("/login")) {
+    throw new Error("部署地址或登录状态不匹配");
+  }
+  if (!validId(config.projectId) || typeof config.sfcName !== "string" || !config.sfcName.trim()
+      || !["start", "submit", "end"].includes(config.action)) {
+    throw new Error("项目、任务类型或动作无效");
+  }
+  const path = `/api/v2/projects/${encodeURIComponent(config.projectId)}/scenariofieldconfigs?objectType=task&withTaskflowstatus=true`;
+  const response = await fetch(path, { credentials: "same-origin" });
+  if (!response.ok || response.redirected) throw new Error(`工作流配置请求失败: HTTP ${response.status}`);
+  let data;
+  try { data = await response.json(); } catch { throw new Error("工作流配置不是有效 JSON"); }
+  if (!Array.isArray(data)) throw new Error("工作流配置不是直接数组");
+  const named = data.filter(item => item && item.name === config.sfcName);
+  if (named.length !== 1) throw new Error("任务类型不存在或不唯一");
+  const sfc = named[0];
+  if (!validId(sfc._id) || sfc._projectId !== config.projectId || sfc.objectType !== "task"
+      || sfc.isArchived !== false || !validId(sfc._taskflowId) || !Array.isArray(sfc.taskflowstatuses)) {
+    throw new Error("任务类型的项目、工作流或状态配置无效");
+  }
+  const statusIds = new Set();
+  for (const status of sfc.taskflowstatuses) {
+    if (!status || !validId(status._id) || typeof status.name !== "string" || !status.name.trim()
+        || status._taskflowId !== sfc._taskflowId || !["start", "unset", "end"].includes(status.kind)
+        || typeof status.isArchived !== "boolean") {
+      throw new Error("状态字段缺失或不属于目标工作流");
+    }
+    const id = status._id.toLowerCase();
+    if (statusIds.has(id)) throw new Error("工作流状态 ID 重复");
+    statusIds.add(id);
+  }
+  const selected = sfc.taskflowstatuses.filter(status => status.isArchived === false && (
+    config.action === "submit" ? status.name === "已提测" && status.kind === "unset" : status.kind === config.action
+  ));
+  if (selected.length !== 1) throw new Error("目标状态不存在或不唯一");
+  const status = selected[0];
+  return {
+    projectId: config.projectId,
+    sfc: { id: sfc._id, name: sfc.name, workflowId: sfc._taskflowId },
+    status: { id: status._id, name: status.name, kind: status.kind },
+  };
+}
+```
+<!-- workflow-metadata-example:end -->
+
 ## 创建任务
 
 `POST /api/tasks`：
@@ -519,7 +593,7 @@ async () => {
 }
 ```
 
-`_scenariofieldconfigId` 必须与工作流匹配，`_taskflowstatusId` 必须使用 `kind: start` 的起始状态，不能在创建时使用中间态或终态。当前文档只有 S1867 需求 SFC 的起始态 `904` 和终态 `907` 经过验证；其他 SFC 的自动创建或完成必须停止，除非用户提供并确认了属于实际 SFC 工作流且分别为 `kind: start` / `kind: end` 的状态配置。不得猜测状态，也不得编造通用状态发现接口；`GET /api/stages` 返回阶段，不是工作流状态列表。
+`_scenariofieldconfigId` 必须与工作流匹配，`_taskflowstatusId` 必须使用实际配置中唯一有效的 `kind: start` 起始状态，不能在创建时使用中间态或终态。按上一节实时查询并校验，状态有歧义或无法确认时停止。用户已授权所需任务时，不要求其提供可由有效项目配置确定的内部 ID。工时兜底模板仍锁定 S1867 需求 SFC 的 904 状态，不因为新增查询而扩大模板适用范围。
 
 创建前应在循环外一次性查询任务列表、阶段和 SFC 元数据。响应只接受明确的直接数组，或对象中唯一且字段名已知的数组；结构不明时停止。创建响应应包含任务 `_id` 和 `content`，随后通过 `tasks/bulk` 加 GraphQL/明确任务详情独立校验标题、项目、任务列表、阶段、执行者、SFC、未删除/未归档、`isDone=false` 和起始状态；任何字段未能从查询结果确认时不得登记工时。
 
@@ -533,7 +607,7 @@ PUT /api/tasks/{id}/taskflowstatus
 
 ```json
 {
-  "_taskflowstatusId": "目标终态ID",
+  "_taskflowstatusId": "目标状态ID",
   "_scenariofieldconfigId": "任务实际场景配置ID",
   "sfcRequiredValidateEnable": true,
   "persistentValidatorEnable": false,
@@ -555,6 +629,8 @@ PUT /api/tasks/{id}/taskflowstatus
 
 默认保持 `sfcRequiredValidateEnable=true`。仅在用户明确授权跳过目标状态必填校验时，才可使用 `sfcRequiredValidateEnable=false`；不得把它作为默认值。
 
+用户明确要求提测时，可按[提测流程](test-submission.md)核对并进入实际测试单工作流中的“已提测”中间状态；它不是完成任务，不能以 `kind=end` 或 `isDone=true` 验证。以下终态核对仅适用于用户明确要求完成任务的情况。
+
 ### 写后验证
 
 状态更新调用 `api` 时可显式使用 `allowEmptySuccess: true` 接受已知的 204/空成功响应；该返回值只能表示请求已接收。无论返回 200 还是 204，都必须重新调用 `tasks/bulk`，并用 `reconcileBulkTasks` 逐个确认：
@@ -572,7 +648,7 @@ PUT /api/tasks/{id}/taskflowstatus
 |---|---|
 | `PUT /api/tasks/{id}` 携带 `_taskflowstatusId` | 返回 `204`，但状态是空操作、不变化 |
 | `PUT /api/tasks/{id}/isDone` | 工作流项目报 `NotSupportActionInTaskflowProject` |
-| 把 `GET /api/stages` 当工作流状态列表 | 错误；该接口实际还需要 `_tasklistId`，返回的是阶段。工作流状态以任务返回值或已知项目配置为准 |
+| 把 `GET /api/stages` 当工作流状态列表 | 错误；该接口实际还需要 `_tasklistId`，返回的是阶段。工作流状态应按上节的项目 SFC 元数据核对 |
 
 ## 失败、重试与删除
 

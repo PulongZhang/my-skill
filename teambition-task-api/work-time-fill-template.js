@@ -1,7 +1,7 @@
 /**
  * Teambition F12 工时补录兜底模板。
  * 适用范围：已验证的 S1867“需求”SFC 与起始态 904；配置值仍须按本次运行逐项核验，不能把示例当默认输入。
- * 其他 SFC 不得复用该状态，必须先提供并核验其实际工作流中 kind:start 的配置。
+ * 其他 SFC 不得复用本模板；需另行核验其实际工作流中 kind:start 的配置并编写适用脚本。
  * 本模板仅用于本人补录：当前登录用户、工时所属用户和任务执行者必须是同一人。
  *
  * 每次运行都会重新查询任务和每日总工时，优先复用，仅补剩余缺口，不修改任务状态。
@@ -410,14 +410,42 @@
     const [tasklistsRaw, stagesRaw, sfcsRaw] = await Promise.all([
       api(`/api/tasklists?_projectId=${encodeURIComponent(PROJECT_ID)}`, { allowArray: true }),
       api(`/api/stages?_tasklistId=${encodeURIComponent(TASKLIST_ID)}`, { allowArray: true }),
-      api(`/api/v2/projects/${encodeURIComponent(PROJECT_ID)}/scenariofieldconfigs`, { allowArray: true }),
+      api(`/api/v2/projects/${encodeURIComponent(PROJECT_ID)}/scenariofieldconfigs?objectType=task&withTaskflowstatus=true`, { allowArray: true }),
     ]);
     const tasklists = metadataArray(tasklistsRaw, ['tasklists'], '任务列表');
     const stages = metadataArray(stagesRaw, ['stages'], '阶段');
     const sfcs = metadataArray(sfcsRaw, ['scenariofieldconfigs', 'scenarioFieldConfigs'], 'SFC');
-    if (!tasklists.some((item, index) => metadataId(item, `tasklists[${index}]`) === TASKLIST_ID)) throw new Error('TASKLIST_ID 不属于目标项目');
-    if (!stages.some((item, index) => metadataId(item, `stages[${index}]`) === STAGE_ID)) throw new Error('STAGE_ID 不属于目标任务列表');
-    if (!sfcs.some((item, index) => metadataId(item, `sfcs[${index}]`) === SFC_ID)) throw new Error('SFC_ID 不属于目标项目');
+    const matchingLists = tasklists.filter((item, index) => metadataId(item, `tasklists[${index}]`) === TASKLIST_ID);
+    if (matchingLists.length !== 1 || matchingLists[0]._projectId !== PROJECT_ID || matchingLists[0].isArchived !== false) {
+      throw new Error('任务列表不存在、不唯一或不属于目标项目');
+    }
+    const matchingStages = stages.filter((item, index) => metadataId(item, `stages[${index}]`) === STAGE_ID);
+    if (matchingStages.length !== 1 || matchingStages[0]._tasklistId !== TASKLIST_ID || matchingStages[0]._projectId !== PROJECT_ID
+        || ![false, null].includes(matchingStages[0].isArchived)) {
+      throw new Error('阶段不存在、不唯一或不属于目标任务列表');
+    }
+    const matches = sfcs.filter((item, index) => metadataId(item, `sfcs[${index}]`) === SFC_ID);
+    if (matches.length !== 1) throw new Error('SFC_ID 不存在或不唯一');
+    const sfc = matches[0];
+    if (sfc._projectId !== PROJECT_ID || sfc.objectType !== 'task' || sfc.name !== '需求' || sfc.isArchived !== false) {
+      throw new Error('需求 SFC 的项目、类型或归档状态不匹配');
+    }
+    const flowId = requireId(sfc._taskflowId, '需求 SFC._taskflowId');
+    if (!Array.isArray(sfc.taskflowstatuses)) throw new Error('需求 SFC 缺少工作流状态列表');
+    const statusIds = new Set();
+    sfc.taskflowstatuses.forEach((status, index) => {
+      const id = metadataId(status, `taskflowstatuses[${index}]`);
+      if (statusIds.has(id.toLowerCase())) throw new Error('工作流状态 ID 重复');
+      statusIds.add(id.toLowerCase());
+      if (status._taskflowId !== flowId || !['start', 'unset', 'end'].includes(status.kind)
+          || typeof status.isArchived !== 'boolean') {
+        throw new Error('工作流状态的归属、种类或归档状态无效');
+      }
+    });
+    const starts = sfc.taskflowstatuses.filter((status) => status.isArchived === false && status.kind === 'start');
+    if (starts.length !== 1 || metadataId(starts[0], '起始状态') !== TFS_START_ID) {
+      throw new Error('需求 SFC 的有效起始状态不唯一或不是 904');
+    }
   }
 
   const [beforeHours, beforeTasks, beforeBulk] = await Promise.all([

@@ -1,6 +1,6 @@
 ---
 name: teambition-task-api
-description: Use when querying Teambition tasks or project metadata, backfilling and inspecting work-time records, creating tasks needed by an approved work-time plan, completing verified taskflow tasks, updating existing file versions through the logged-in Chrome session and AWOS API, or reusing a logged-in Teambition browser session through chrome-devtools or an F12 console script. Also use when Git commits or a daily work summary must be turned into a proposed Teambition work-time plan; keep extraction/planning separate from authorized writes.
+description: Use when querying Teambition tasks or project metadata, creating and submitting test tickets to an assigned tester, backfilling or inspecting work-time records, completing verified taskflow tasks, updating existing file versions through the logged-in Chrome session and AWOS API, or reusing a logged-in Teambition browser session through chrome-devtools or an F12 console script. Also use when Git commits or a daily work summary must be turned into a proposed Teambition work-time plan; keep extraction/planning separate from authorized writes.
 ---
 
 # Teambition 任务与文件 API
@@ -21,6 +21,7 @@ description: Use when querying Teambition tasks or project metadata, backfilling
 |---|---|
 | 查询组织内某执行者的全部未完成任务 | 支持；必须完成 GraphQL 全分页，再按项目本地过滤 |
 | 查询项目、任务列表、阶段、SFC 等元数据 | 支持只读查询；不修改项目元数据 |
+| 创建并提交测试单 | S1867 已验证；核对测试人、必填字段及实际工作流，按[提测流程](references/test-submission.md)创建并转为已提测 |
 | 补录工时 | 支持；先形成逐日计划，确认后运行时重查并仅补缺口 |
 | 为工时计划创建缺失任务 | 支持；只能使用已验证的 SFC 起始状态，创建后独立核验 |
 | 单独批量创建任务 | 可复用“补录工时”的任务识别、元数据校验与创建后验证规则，但必须形成独立计划和授权，不得顺带登记工时 |
@@ -40,16 +41,18 @@ description: Use when querying Teambition tasks or project metadata, backfilling
 4. MCP Chrome、内置浏览器和用户日常浏览器可能使用不同会话。导航后必须重新检查实际 URL 和登录态，不能用另一个浏览器已登录来推断当前 MCP Chrome 已登录。
 5. `navigate_page` 只用于已选中的 Teambition 页面或空白页，以打开或刷新已确认的目标 URL。
 6. 选中目标页面后检查 URL。如果包含 `/login`，立即停止并要求用户完成登录；登录前不得请求业务接口。
-7. 已登录时，使用 `evaluate_script` 在页面内执行同源 `fetch`：
+7. 已登录时，已验证的接口优先使用 `evaluate_script` 在页面内执行同源 `fetch`；自定义字段或富文本缺少已验证写入契约时，按对应流程使用已登录页面的原生操作，不猜测请求体：
    - 查询操作可直接执行；
    - 创建、登记工时、删除、修改状态及更新文件版本必须按已获授权的具体范围执行；缺少授权时先展示具体计划；
    - 每次脚本应自包含配置、请求 helper、操作逻辑和返回结果，不依赖上次执行留下的全局变量。
 8. Chrome DevTools 不可用，或用户要求手动运行时，生成完整、自包含的 F12 IIFE：`(async () => { ... })();`：
    - 只读请求的 IIFE 只包含查询、完整性检查和结果报告，不得包含任何写接口；
    - 写请求的 IIFE 必须执行“运行时查询 → 校验 → 预览 → `window.confirm`（明确允许取消）→ 写入 → 独立验证”，用户取消时不得产生写入。
-9. 始终让浏览器复用同源登录态。不得读取、打印或手工拼接 `Cookie` / `Authorization`。
+9. 始终让浏览器复用同源登录态。不得读取、打印或手工拼接 `Cookie` / `Authorization`。元数据及任务详情只向工具结果、日志和聊天输出所需字段；剔除临时签名 URL、上传令牌、认证参数及无关正文，不能返回原始完整 SFC 或富文本对象。
 
-任务和工时接口见 [`references/api.md`](references/api.md)；文件版本更新按需读取 [`references/file-versions.md`](references/file-versions.md)。
+任务和工时接口见 [`references/api.md`](references/api.md)；提测单按需读取 [`references/test-submission.md`](references/test-submission.md)；文件版本更新按需读取 [`references/file-versions.md`](references/file-versions.md)。
+
+对已创建、更新或精确查询的任务，最终回复提供已确认部署 origin 下的可点击直达链接。在 S1867 优先使用已验证的 `https://tb.cet-electric.com:4753/task/{taskId}`；ID 必须来自独立回查，链接不含认证参数。其他部署先验证对应直达路径；不能验证时说明限制，不能把重定向到列表的项目内链接称作直达链接。
 
 ## 标准流程 A：查询全部未完成任务
 
@@ -89,7 +92,7 @@ description: Use when querying Teambition tasks or project metadata, backfilling
 
 1. 获得授权后重新查询日期聚合和候选任务，不能直接使用阶段 1 的旧结果写入。日期聚合仍使用 `filter.task: {}`；准确 ID 必须再次用 `tasks/bulk` 校验，标题候选仍复用流程 A 的组织级全分页并按 `project.id` 本地过滤，分页不完整禁止创建。
 2. 对复用任务逐项校验 ID、标题、项目、SFC、执行者、删除/归档/完成状态；SFC 必须纳入授权方案，变化时停止。归档状态 `tasks/bulk` 不返回，必须用 GraphQL 的 `isArchived` 校验。发工时前再对所有最终任务 ID 做一次 bulk 预检，异常项不得写入。任务执行者与工时所属用户不同时，只有用户已明确把自己的参与工时映射到该精确任务，且任务身份和实际执行者均已展示并确认，才可生成自定义脚本；不得改执行者、完成任务或套用本人补录模板。
-3. 仅在没有精准唯一匹配、不是重名歧义，且运行时仍有工时缺口时创建任务。创建前在循环外一次性查询并校验任务列表、阶段和 SFC 元数据；阶段接口不得用于猜工作流状态。当前仅验证了 S1867 需求 SFC 的起始态 `904`；其他 SFC 必须停止，直到用户提供并确认属于实际 SFC 工作流且 `kind: start` 的状态配置。
+3. 仅在没有精准唯一匹配、不是重名歧义，且运行时仍有工时缺口时创建任务。创建前在循环外一次性查询并校验任务列表、阶段和 SFC 元数据，按[工作流状态查询](references/api.md#查询项目任务类型与工作流状态)确认所属工作流的唯一有效 `kind: start` 状态；状态缺失、重复或归属不明时停止，不猜测。`work-time-fill-template.js` 仍只支持已核验的 S1867 需求 SFC 与起始态 904，其他 SFC 需另写符合已确认方案的脚本，不得直接套用模板。
 4. 发 batch 前再做一次靠近写入的全日期聚合重查：缺口增加时停止，减少时只补更小缺口，已满时跳过。已有记录应先按任务、日期、时长和说明匹配已授权切片，避免重复补同一工作。若缺口缩小但无法判断哪条切片已存在，不得机械截断或挪用其他说明，应输出修订计划重新确认。batch 响应和写后聚合都必须按本次记录 ID、任务、日期、时长及记录数逐项核对；每日总量严格等于目标才成功，超过目标须报告超额/并发冲突。
 5. 运行时重查只能自动减少或跳过已授权操作。若结果要求增加工时、增加日期、新建任务、改变任务 ID/标题/类型、改变目标状态或扩大任何写入范围，必须输出修订计划并重新取得明确授权。
 6. 按任务汇总 batch 请求，同时保留工作切片顺序和逐日缺口边界。`times` 可以包含多天，也可以为同一任务、同一日期包含多条不同说明；不得用 `Map(date -> time)`、日期去重或“每天一条”的校验吞掉切片。响应必须按输入项逐条核对并保存每个记录 ID。
@@ -113,7 +116,7 @@ F12 工时模板见 [`work-time-fill-template.js`](work-time-fill-template.js)�
    - SFC / `_scenariofieldconfigId`；
    - `isDeleted`、`isDone`（`tasks/bulk` 不返回归档状态，`isArchived` 恒为 `null`，归档校验必须用 GraphQL）；
    - 当前 `isDone` 和 `_taskflowstatusId`。
-4. 逐项确认目标状态 ID 属于任务实际 SFC 对应的工作流且 `kind: end`。当前仅验证了 S1867 需求 SFC 的终态 `907`；其他 SFC 必须停止，直到用户提供并确认属于实际 SFC 工作流且 `kind: end` 的状态配置，不得自动猜测，也不得复用需求终态。
+4. 按[工作流状态查询](references/api.md#查询项目任务类型与工作流状态)逐项确认目标状态属于任务实际 SFC 对应的工作流且 `kind: end`；存在多个可选终态且用户未指定、状态缺失或归属不明时停止消歧，不得复用其他 SFC 的状态。用户已明确要求完成且实时配置唯一明确时，不再要求其提供内部状态 ID。
 5. 数量不符、ID 缺失、重名、项目不符、类型不符、已删除或已归档时停止对应项，并向用户报告。归档状态以 GraphQL 查询为准（`tasks/bulk` 不返回）。根据当前状态继续判断：
    - `isDone=true` 且状态正是目标终态：跳过并报告；
    - `isDone=true` 但处于其他终态：停止，请用户决定；
@@ -151,6 +154,12 @@ F12 工时模板见 [`work-time-fill-template.js`](work-time-fill-template.js)�
 4. 只处理明确授权的原文件；不新建、重命名、修改可见性或成员。上传后、提交版本前再检查远端内容，发现并发变化则停止。
 5. 对象上传和版本提交均不自动重试。响应丢失或调用中断后只读核对原 ID 与下载哈希；只有独立下载的原始字节匹配才报告完成。
 
+## 标准流程 F：创建并提交测试单
+
+用户明确要求提测并指定测试人时，按[提测流程](references/test-submission.md)确定项目、人员、任务类型和准确范围，检查已有任务并核对实时工作流。创建时使用唯一有效起始状态；核对版本、测试说明、执行者及必填字段后，按真实工作流转到“已提测”，独立查询状态和内容并提供直达链接。已获明确授权时无需重复索要内部状态 ID；缺少目标、唯一性、配置或授权时停止并说明。
+
+创建与提测是两个可分别成功的步骤。响应丢失或界面未关闭时先只读核查任务 ID 和当前状态，不重复创建或盲目重发；不要将中间态“已提测”当作终态，也不要登记工时或代替测试人员完成任务。
+
 ## 安全约束与失败处理
 
 - 查询可直接执行；所有外部写操作必须获得用户明确授权。
@@ -167,6 +176,7 @@ F12 工时模板见 [`work-time-fill-template.js`](work-time-fill-template.js)�
 ## 快速参考
 
 - API 细节：[`references/api.md`](references/api.md)
+- 测试单提测和任务链接：[`references/test-submission.md`](references/test-submission.md)
 - 文件上传与原文件版本：[`references/file-versions.md`](references/file-versions.md)
 - S1867 速查：[`references/s1867.md`](references/s1867.md)
 - F12 工时模板：[`work-time-fill-template.js`](work-time-fill-template.js)
